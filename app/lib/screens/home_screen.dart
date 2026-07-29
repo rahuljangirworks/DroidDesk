@@ -272,6 +272,18 @@ class HomeScreen extends StatelessWidget {
                         ),
                         _divider(),
                         _infoRow(
+                          'Kernel',
+                          state.deviceInfo['kernelRelease']?.toString() ??
+                              'Unknown',
+                        ),
+                        _divider(),
+                        _infoRow(
+                          'Tailscale',
+                          state.deviceInfo['tailscaleMode']?.toString() ??
+                              'Userspace networking',
+                        ),
+                        _divider(),
+                        _infoRow(
                           'RAM',
                           '${state.deviceInfo['totalRamMB'] ?? 'N/A'} MB',
                         ),

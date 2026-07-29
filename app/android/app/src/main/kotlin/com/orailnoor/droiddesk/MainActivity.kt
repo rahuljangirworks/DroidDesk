@@ -14,6 +14,7 @@ import com.orailnoor.droiddesk.service.DroidDeskService
 import com.orailnoor.droiddesk.runtime.LinuxRuntime
 import com.orailnoor.droiddesk.runtime.ChrootRuntime
 import com.orailnoor.droiddesk.runtime.RootShell
+import com.orailnoor.droiddesk.runtime.DwmJangirProfile
 import com.orailnoor.droiddesk.view.AndroidSurfaceViewFactory
 import com.orailnoor.droiddesk.x11.X11ServerService
 import kotlin.concurrent.thread
@@ -88,7 +89,7 @@ class MainActivity : FlutterActivity() {
                     val inLatch = java.util.concurrent.CountDownLatch(1)
                     var inOk = false
                     chrootRuntime.installDesktopEnvironment(
-                        desktopEnv = "xfce4",
+                        desktopEnv = DwmJangirProfile.DESKTOP_ID,
                         onProgress = { progress, _ ->
                             if (progress >= 1.0 || progress < 0) {
                                 inOk = progress >= 1.0
@@ -106,7 +107,7 @@ class MainActivity : FlutterActivity() {
                     val intent = Intent(this@MainActivity, com.orailnoor.droiddesk.view.DesktopActivity::class.java).apply {
                         putExtra("startSession", true)
                         putExtra("mode", "chroot")
-                        putExtra("de", "xfce4")
+                        putExtra("de", DwmJangirProfile.DESKTOP_ID)
                     }
                     startActivity(intent)
                 }
@@ -139,7 +140,7 @@ class MainActivity : FlutterActivity() {
                         "hasRoot" to rooted,
                         "distro" to if (rooted) "ubuntu-chroot" else "termux-native",
                         "installedDE" to if (rooted) {
-                            if (chrootRuntime.isDesktopInstalled()) "xfce4" else ""
+                            chrootRuntime.getInstalledDE()
                         } else {
                             linuxRuntime.getInstalledDE()
                         },
@@ -163,7 +164,15 @@ class MainActivity : FlutterActivity() {
                             linuxRuntime.getGraphicsMode()
                         },
                         "totalRamMB" to getTotalRam(),
-                        "availableStorageMB" to getAvailableStorage()
+                        "availableStorageMB" to getAvailableStorage(),
+                        "kernelRelease" to readKernelRelease(),
+                        "tunAvailable" to java.io.File("/dev/net/tun").exists(),
+                        "tailscaleMode" to if (java.io.File("/dev/net/tun").exists()) {
+                            "kernel-tun-with-userspace-fallback"
+                        } else {
+                            "userspace-networking"
+                        },
+                        "kernelManagement" to "Android host-managed; device-specific updates only"
                     ))
                 }
 
@@ -236,7 +245,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "installDesktopEnvironment" -> {
-                    val desktopEnv = call.argument<String>("de") ?: "xfce4"
+                    val desktopEnv = DwmJangirProfile.normalizeDesktop(call.argument<String>("de"))
                     thread {
                         try {
                             val latch = java.util.concurrent.CountDownLatch(1)
@@ -278,7 +287,7 @@ class MainActivity : FlutterActivity() {
 
                 // ── Native Termux desktop install (non-root fallback) ──
                 "installDesktopNative" -> {
-                    val desktopEnv = call.argument<String>("de") ?: "xfce4"
+                    val desktopEnv = DwmJangirProfile.normalizeDesktop(call.argument<String>("de"))
                     thread {
                         linuxRuntime.setInstallLogSink { chunk ->
                             runOnUiThread {
@@ -348,7 +357,7 @@ class MainActivity : FlutterActivity() {
 
                 // ── Start Linux session ──
                 "startLinux" -> {
-                    val desktopEnv = call.argument<String>("de") ?: "xfce4"
+                    val desktopEnv = DwmJangirProfile.normalizeDesktop(call.argument<String>("de"))
                     val mode = call.argument<String>("mode") ?: "x11"
                     var width = call.argument<Int>("width") ?: 1920
                     var height = call.argument<Int>("height") ?: 1080
@@ -544,5 +553,13 @@ class MainActivity : FlutterActivity() {
     private fun getAvailableStorage(): Long {
         val stat = android.os.StatFs(filesDir.absolutePath)
         return stat.availableBytes / (1024 * 1024)
+    }
+
+    private fun readKernelRelease(): String {
+        return try {
+            java.io.File("/proc/sys/kernel/osrelease").readText().trim()
+        } catch (_: Exception) {
+            System.getProperty("os.version") ?: "unknown"
+        }
     }
 }

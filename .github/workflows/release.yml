@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to package
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish ARM64 APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
+            tag="${DISPATCH_TAG}"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must be strict SemVer, for example v0.2.0" >&2
+            exit 2
+          fi
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          pubspec_version=$(sed -n 's/^version: \([^+]*\).*/\1/p' app/pubspec.yaml)
+          test "$pubspec_version" = "${{ steps.release.outputs.version }}"
+          scripts/check.sh
+
+      - name: Install Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Analyze and test
+        working-directory: app
+        run: |
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze --fatal-infos
+          flutter test
+
+      - name: Generate Android Gradle wrapper
+        run: |
+          printf 'flutter.sdk=%s\n' "$FLUTTER_ROOT" > app/android/local.properties
+          gradle -p app/android wrapper --gradle-version 8.13
+
+      - name: Test Kotlin profile
+        working-directory: app/android
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build release APK
+        working-directory: app
+        run: >-
+          flutter build apk --release
+          --build-name=${{ steps.release.outputs.version }}
+          --build-number=${{ github.run_number }}
+
+      - name: Prepare checksummed artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          artifact="DroidDesk-${{ steps.release.outputs.tag }}-arm64.apk"
+          cp app/build/app/outputs/flutter-apk/app-release.apk "dist/$artifact"
+          sha256sum "dist/$artifact" > "dist/$artifact.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: droiddesk-${{ steps.release.outputs.tag }}-arm64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: DroidDesk ${{ steps.release.outputs.tag }}
+          generate_release_notes: true
+          prerelease: true
+          fail_on_unmatched_files: true
+          body: |
+            DWM Rahul release candidate for ARM64 Android.
+
+            This build is automated and checksummed. Physical-device qualification
+            and the release-compliance blockers documented in COMPLIANCE.md remain
+            open, so this release is intentionally marked as a pre-release.
+          files: |
+            dist/*.apk
+            dist/*.sha256

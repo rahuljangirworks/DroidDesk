@@ -91,10 +91,8 @@ class LinuxRuntime(private val context: Context) {
     /** Qualcomm exposes the Adreno render device through KGSL on Android. */
     private fun hasAdrenoGpu(): Boolean = File("/dev/kgsl-3d0").exists()
 
-    private fun normalizedDesktop(desktopEnv: String): String = when (desktopEnv.lowercase()) {
-        "lxqt", "mate", "kde", "xfce4" -> desktopEnv.lowercase()
-        else -> "xfce4"
-    }
+    private fun normalizedDesktop(desktopEnv: String): String =
+        DwmJangirProfile.normalizeDesktop(desktopEnv)
 
     // ── Status ──
 
@@ -108,7 +106,10 @@ class LinuxRuntime(private val context: Context) {
 
     fun getInstalledDE(): String {
         val marker = File(prefixDir, DE_MARKER)
-        if (marker.exists()) return marker.readText().trim().ifEmpty { "xfce4" }
+        if (marker.exists()) {
+            val installed = marker.readText().trim()
+            return if (installed == DwmJangirProfile.DESKTOP_ID) installed else ""
+        }
         // Individual desktop binaries may already exist after a partially failed
         // package transaction. Only the marker written at the end of the complete
         // setup flow means the runtime is ready to launch.
@@ -130,6 +131,9 @@ class LinuxRuntime(private val context: Context) {
         "nodejs" to (File(binDir, "node").exists() && File(binDir, "npm").exists()),
         "imagemagick" to (File(binDir, "magick").exists() || File(binDir, "convert").exists()),
         "proot_debian" to isMinimalDebianInstalled(),
+        "tailscale" to File(binDir, "tailscale").exists(),
+        // The glibc RustDesk desktop package runs in rooted Ubuntu chroot mode.
+        "rustdesk" to false,
     )
 
     private fun isMinimalDebianInstalled(): Boolean {
@@ -427,8 +431,8 @@ class LinuxRuntime(private val context: Context) {
                 "/proc/self/cwd/etc/dpkg",
             )
 
-            // Package installations started inside the XFCE terminal bypass the
-            // Kotlin installation flow. Run this after every dpkg transaction so
+            // Package installations started inside a desktop terminal bypass
+            // the Kotlin installation flow. Run this after every dpkg transaction so
             // newly unpacked commands and maintainer scripts never retain
             // Termux's original, inaccessible interpreter prefix.
             relocateShebangs.writeText(
@@ -674,20 +678,6 @@ class LinuxRuntime(private val context: Context) {
         }
         markerFile.writeText("done")
         Log.i(TAG, "Patched $patchCount scripts.")
-    }
-
-    /** Relocate commands that Xfce compiled as absolute Termux paths. */
-    private fun patchEmbeddedXfcePaths() {
-        patchEmbeddedCommand(
-            File(prefixDir, "bin/xfce4-session"),
-            "/data/data/com.termux/files/usr/bin/iceauth",
-            "iceauth",
-        )
-        patchEmbeddedCommand(
-            File(prefixDir, "bin/xfce4-panel"),
-            "/data/data/com.termux/files/usr/lib/xfce4/panel/migrate",
-            "migrate",
-        )
     }
 
     private fun patchEmbeddedCommand(file: File, oldCommand: String, newCommand: String) {
@@ -997,13 +987,11 @@ class LinuxRuntime(private val context: Context) {
         env["LD_LIBRARY_PATH"] = "${prefixDir.absolutePath}/lib"
         env["PATH"] = listOf(
             "${prefixDir.absolutePath}/bin",
-            "${prefixDir.absolutePath}/lib/xfce4/panel",
             System.getenv("PATH") ?: "/system/bin",
         ).joinToString(":")
         env["HOME"] = homeDir.absolutePath
-        // VTE-based terminals use SHELL to spawn their child process. Android's
-        // account database points at /system/bin/sh, which is not the relocated
-        // Termux userspace expected by XFCE Terminal.
+        // Desktop terminals use SHELL to spawn their child process. Android's
+        // account database points at /system/bin/sh instead of this userspace.
         env["SHELL"] = File(binDir, "bash").absolutePath
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
@@ -1016,12 +1004,9 @@ class LinuxRuntime(private val context: Context) {
         env["PYTHONHOME"] = prefixDir.absolutePath
         env["PIP_CONFIG_FILE"] = "${prefixDir.absolutePath}/etc/pip.conf"
         env["XDG_DATA_DIRS"] = "${prefixDir.absolutePath}/share"
-        // Xfce validates that its compile-time SYSCONFDIR is present literally,
-        // even though actual file access is relocated to this app's prefix.
         env["XDG_CONFIG_DIRS"] = listOf(
             "${prefixDir.absolutePath}/etc/xdg",
             "${prefixDir.absolutePath}/etc",
-            "/data/data/com.termux/files/usr/etc",
         ).joinToString(":")
         env["GDK_PIXBUF_MODULEDIR"] = "${prefixDir.absolutePath}/lib/gdk-pixbuf-2.0/2.10.0/loaders"
         env["GDK_PIXBUF_MODULE_FILE"] = "${prefixDir.absolutePath}/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
@@ -1278,8 +1263,129 @@ class LinuxRuntime(private val context: Context) {
         return isMinimalDebianInstalled()
     }
 
+    private fun installDwmJangirNative(): Boolean {
+        val sourceDir = File(homeDir, ".local/src/dwm-jangir")
+        val installCommand = """
+            set -e
+            source_dir="${sourceDir.absolutePath}"
+            mkdir -p "${sourceDir.parentFile!!.absolutePath}"
+            if [ ! -d "${sourceDir.absolutePath}/.git" ]; then
+                git clone --no-checkout "${DwmJangirProfile.SOURCE_REPOSITORY}" "${sourceDir.absolutePath}"
+            fi
+            git -C "${sourceDir.absolutePath}" remote set-url origin "${DwmJangirProfile.SOURCE_REPOSITORY}"
+            git -C "${sourceDir.absolutePath}" fetch --depth=1 origin "${DwmJangirProfile.SOURCE_COMMIT}"
+            git -C "${sourceDir.absolutePath}" checkout --detach "${DwmJangirProfile.SOURCE_COMMIT}"
+            test "${'$'}(git -C "${sourceDir.absolutePath}" rev-parse HEAD)" = "${DwmJangirProfile.SOURCE_COMMIT}"
+            make -C "${sourceDir.absolutePath}" clean
+            make -C "${sourceDir.absolutePath}" CC=clang PREFIX="${prefixDir.absolutePath}"
+            install -m 0755 "${sourceDir.absolutePath}/dwm" "${binDir.absolutePath}/dwm"
+            for helper in "${sourceDir.absolutePath}"/scripts/*; do
+                [ -f "${'$'}helper" ] || continue
+                [ -x "${'$'}helper" ] || continue
+                install -m 0755 "${'$'}helper" "${binDir.absolutePath}/${'$'}(basename "${'$'}helper")"
+            done
+        """.trimIndent()
+        if (executeCommand(installCommand).startsWith("Error:")) {
+            Log.e(TAG, "Pinned dwm-jangir build or install failed")
+            return false
+        }
+
+        val xdgConfig = File(homeDir, ".config").apply { mkdirs() }
+        val dwmConfig = File(xdgConfig, "dwm-titus").apply { mkdirs() }
+        listOf("hotkeys.toml", "themes.toml", "window-rules.toml").forEach { name ->
+            val destination = File(dwmConfig, name)
+            if (!destination.exists()) {
+                File(sourceDir, "config/$name").copyTo(destination)
+            }
+        }
+
+        val managedQuickshell = File(xdgConfig, "quickshell")
+        managedQuickshell.deleteRecursively()
+        if (!File(sourceDir, "config/quickshell").copyRecursively(managedQuickshell, overwrite = true)) {
+            Log.e(TAG, "Could not install managed Quickshell configuration")
+            return false
+        }
+
+        val autostartDir = File(homeDir, ".local/share/dwm-titus/scripts").apply { mkdirs() }
+        File(autostartDir, "autostart.sh").apply {
+            writeText(DwmJangirProfile.mobileAutostart(prefixDir.absolutePath))
+            setExecutable(true, false)
+        }
+        File(autostartDir, "autostop.sh").apply {
+            writeText(
+                """
+                #!/bin/sh
+                pkill -x quickshell >/dev/null 2>&1 || true
+                pkill -x picom >/dev/null 2>&1 || true
+                """.trimIndent() + "\n",
+            )
+            setExecutable(true, false)
+        }
+
+        return File(binDir, "dwm").canExecute()
+    }
+
+    private fun installTailscaleNative(): Boolean {
+        val workDir = File(tmpDir, "tailscale-${DwmJangirProfile.TAILSCALE_VERSION}")
+        val archive = File(workDir, DwmJangirProfile.TAILSCALE_ARCHIVE)
+        workDir.mkdirs()
+        val installCommand = """
+            set -e
+            curl -fL --retry 3 "${DwmJangirProfile.TAILSCALE_URL}" -o "${archive.absolutePath}"
+            printf '%s  %s\n' "${DwmJangirProfile.TAILSCALE_SHA256}" "${archive.absolutePath}" | sha256sum -c -
+            tar -xzf "${archive.absolutePath}" -C "${workDir.absolutePath}"
+            install -m 0755 \
+                "${workDir.absolutePath}/tailscale_${DwmJangirProfile.TAILSCALE_VERSION}_arm64/tailscale" \
+                "${binDir.absolutePath}/tailscale"
+            install -m 0755 \
+                "${workDir.absolutePath}/tailscale_${DwmJangirProfile.TAILSCALE_VERSION}_arm64/tailscaled" \
+                "${binDir.absolutePath}/tailscaled"
+        """.trimIndent()
+        if (executeCommand(installCommand).startsWith("Error:")) return false
+
+        File(binDir, "droiddesk-tailscaled").apply {
+            writeText(
+                """
+                #!${File(binDir, "bash").absolutePath}
+                set -eu
+                socket="${tmpDir.absolutePath}/tailscaled.sock"
+                state="${homeDir.absolutePath}/.local/state/tailscale"
+                mkdir -p "${'$'}state"
+                case "${'$'}{1:-status}" in
+                    start)
+                        if ! pgrep -f "tailscaled.*${'$'}socket" >/dev/null 2>&1; then
+                            nohup "${File(binDir, "tailscaled").absolutePath}" \
+                                --socket="${'$'}socket" \
+                                --state="${'$'}state/tailscaled.state" \
+                                --tun=userspace-networking \
+                                --socks5-server=127.0.0.1:1055 \
+                                --outbound-http-proxy-listen=127.0.0.1:1055 \
+                                >"${'$'}state/tailscaled.log" 2>&1 &
+                        fi
+                        ;;
+                    up)
+                        "${File(binDir, "tailscale").absolutePath}" --socket="${'$'}socket" up
+                        ;;
+                    status)
+                        "${File(binDir, "tailscale").absolutePath}" --socket="${'$'}socket" status
+                        ;;
+                    stop)
+                        pkill -f "tailscaled.*${'$'}socket" >/dev/null 2>&1 || true
+                        ;;
+                    *)
+                        echo "Usage: droiddesk-tailscaled {start|up|status|stop}" >&2
+                        exit 2
+                        ;;
+                esac
+                """.trimIndent() + "\n",
+            )
+            setExecutable(true, false)
+        }
+        return File(binDir, "tailscale").canExecute() && File(binDir, "tailscaled").canExecute()
+    }
+
     fun installDesktopEnvironmentNative(
-        desktopEnv: String = "xfce4",
+        desktopEnv: String = DwmJangirProfile.DESKTOP_ID,
         onProgress: ((Double, String) -> Unit)? = null,
     ): Boolean {
         val selectedDesktop = normalizedDesktop(desktopEnv)
@@ -1322,26 +1428,31 @@ class LinuxRuntime(private val context: Context) {
             Log.e(TAG, "pkg update failed")
             return false
         }
-        onProgress?.invoke(0.34, "Installing X11 and audio packages...")
+        onProgress?.invoke(0.34, "Installing X11, D-Bus, audio, and DWM runtime...")
         // DroidDesk embeds the X server, so termux-x11-nightly is deliberately
         // not installed. All desktops connect to the service's DISPLAY=:0.
-        if (!installPackageGroup("pkg install -y xorg-xrandr pulseaudio")) {
+        if (!installPackageGroup(
+                "pkg install -y ${DwmJangirProfile.nativeCorePackages.joinToString(" ")}"
+            )) {
             Log.e(TAG, "Native X11 runtime package install failed")
             return false
         }
-        onProgress?.invoke(0.46, "Installing $selectedDesktop desktop packages...")
-
-        val desktopPackages = when (selectedDesktop) {
-            "lxqt" -> "lxqt qterminal pcmanfm-qt featherpad"
-            "mate" -> "mate mate-terminal"
-            "kde" -> "plasma-desktop konsole dolphin"
-            else -> "xfce4 xfce4-terminal xfce4-whiskermenu-plugin xfce4-notifyd thunar mousepad"
-        }
-        if (!installPackageGroup("pkg install -y $desktopPackages")) {
-            Log.e(TAG, "$selectedDesktop package install failed")
+        onProgress?.invoke(0.48, "Installing dwm-jangir build dependencies...")
+        if (!installPackageGroup(
+                "pkg install -y ${DwmJangirProfile.nativeBuildPackages.joinToString(" ")}"
+            )) {
+            Log.e(TAG, "dwm-jangir build dependency installation failed")
             return false
         }
-        onProgress?.invoke(0.70, "Installing Mesa graphics packages...")
+        onProgress?.invoke(0.60, "Installing recommended DWM desktop components...")
+        DwmJangirProfile.nativeRecommendedPackages.forEach { packageName ->
+            if (!installPackageGroup("pkg install -y $packageName")) {
+                Log.w(TAG, "Optional native package unavailable: $packageName")
+            }
+        }
+        onProgress?.invoke(0.68, "Building pinned dwm-jangir source...")
+        if (!installDwmJangirNative()) return false
+        onProgress?.invoke(0.76, "Installing Mesa graphics packages...")
 
         // mesa-zink pulls the Vulkan loader selected by the active Termux repo.
         // Current repositories use vulkan-loader-generic, which provides and
@@ -1357,26 +1468,30 @@ class LinuxRuntime(private val context: Context) {
         // Turnip/Freedreno is the hardware path for Qualcomm Adreno. Do not
         // install or force that ICD on Mali/PowerVR devices.
         if (hasAdrenoGpu()) {
-            onProgress?.invoke(0.78, "Installing Adreno hardware acceleration...")
+            onProgress?.invoke(0.80, "Installing Adreno hardware acceleration...")
             installPackageGroup("pkg install -y mesa-vulkan-icd-freedreno")
         }
 
-        val nativeTools = "git wget curl openssh htop python clang"
+        val nativeTools = "wget openssh htop python"
         onProgress?.invoke(
-            0.84,
+            0.86,
             "Installing Desktop Essentials tools...",
         )
         if (!installPackageGroup("pkg install -y $nativeTools")) {
             Log.e(TAG, "Native Termux utility package install failed")
             return false
         }
-        onProgress?.invoke(0.94, "Finalizing native Linux environment...")
+        onProgress?.invoke(0.92, "Installing verified Tailscale userspace networking...")
+        if (!installTailscaleNative()) {
+            Log.e(TAG, "Verified Tailscale installation failed")
+            return false
+        }
+        onProgress?.invoke(0.96, "Verifying DWM Rahul environment...")
 
         // Rebuild the hook with the installed clang, then persist the selected DE.
         compileSocketHook()
-        patchEmbeddedXfcePaths()
         marker.writeText(selectedDesktop)
-        onProgress?.invoke(1.0, "Native Linux setup complete")
+        onProgress?.invoke(1.0, "DWM Rahul native setup complete")
         Log.i(TAG, "Native Termux $selectedDesktop installation complete")
         return true
     }
@@ -1423,6 +1538,17 @@ class LinuxRuntime(private val context: Context) {
                 installOptionalPackages(listOf("imagemagick"), onProgress, 0.55)
             }
             "proot_debian" -> installMinimalDebian(onProgress)
+            "tailscale" -> {
+                onProgress?.invoke(0.25, "Installing verified Tailscale ARM64 binaries...")
+                installTailscaleNative()
+            }
+            "rustdesk" -> {
+                onProgress?.invoke(
+                    -1.0,
+                    "RustDesk Linux requires rooted Ubuntu mode. Use the official Android RustDesk app in non-root mode.",
+                )
+                false
+            }
             else -> false
         }
 
@@ -1438,7 +1564,12 @@ class LinuxRuntime(private val context: Context) {
 
     // ── Session Management ──
 
-    fun startSession(desktopEnv: String = "xfce4", mode: String = "x11", width: Int = 1920, height: Int = 1080) {
+    fun startSession(
+        desktopEnv: String = DwmJangirProfile.DESKTOP_ID,
+        mode: String = "x11",
+        width: Int = 1920,
+        height: Int = 1080,
+    ) {
         val selectedDesktop = normalizedDesktop(desktopEnv)
         extractBootstrapIfNeeded(context)
 
@@ -1455,25 +1586,9 @@ class LinuxRuntime(private val context: Context) {
         patchShebangs()
         patchElfRunpaths(prefixDir)
         compileSocketHook()
-        patchEmbeddedXfcePaths()
-
-        if (selectedDesktop == "xfce4") {
-            XfceMobileProfile.install(
-                context = context,
-                homeDir = homeDir.apply { mkdirs() },
-                wallpaperFile = File(
-                    homeDir,
-                    ".local/share/backgrounds/droiddesk-ubuntu-touch.jpg",
-                ),
-            )
-        }
 
         // X11ServerService owns this socket. Never delete it from the client runtime.
         File(tmpDir, ".X11-unix").mkdirs()
-
-        // Remove stale Xfce ICE listeners left by a killed/restarted activity.
-        tmpDir.listFiles { file -> file.name.startsWith(".xfsm-ICE-") }
-            ?.forEach { it.delete() }
 
         // Start a session dbus-daemon and keep it as a child process. Do not use
         // --fork: a forked daemon can outlive the Android activity and leave an
@@ -1544,18 +1659,16 @@ class LinuxRuntime(private val context: Context) {
             return
         }
 
-        val desktopCommand = when (selectedDesktop) {
-            "lxqt" -> "startlxqt"
-            "mate" -> "mate-session"
-            "kde" -> "startplasma-x11"
-            else -> "startxfce4"
-        }
+        val desktopCommand = File(binDir, "dwm").absolutePath
 
         val runScript = """
             # ── Disable AT-SPI accessibility bus ──
             export NO_AT_BRIDGE=1
             export GTK_A11Y=none
             export DISPLAY=:0
+            export XDG_SESSION_TYPE=x11
+            export XDG_CURRENT_DESKTOP=dwm
+            export DESKTOP_SESSION=dwm
 
             # Use the session bus DroidDesk already started
             export DBUS_SESSION_BUS_ADDRESS="unix:path=${dbusSocket.absolutePath}"
@@ -1583,7 +1696,11 @@ class LinuxRuntime(private val context: Context) {
             fi
             echo "DIAG: PulseAudio sinks: ${'$'}(pactl list short sinks 2>/dev/null | cut -f2 | tr '\n' ' ')"
 
-            echo "DIAG: Launching $desktopCommand natively on DISPLAY=:0 ..."
+            if [ -x "${File(binDir, "droiddesk-tailscaled").absolutePath}" ]; then
+                "${File(binDir, "droiddesk-tailscaled").absolutePath}" start >/dev/null 2>&1 || true
+            fi
+
+            echo "DIAG: Launching DWM Rahul natively on DISPLAY=:0 ..."
             exec $desktopCommand
         """.trimIndent()
 

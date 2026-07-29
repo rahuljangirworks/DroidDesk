@@ -24,6 +24,7 @@ import com.termux.x11.MainActivity as TermuxMainActivity
 import com.termux.x11.LorieView
 import com.orailnoor.droiddesk.runtime.LinuxRuntime
 import com.orailnoor.droiddesk.runtime.ChrootRuntime
+import com.orailnoor.droiddesk.runtime.DwmJangirProfile
 import com.orailnoor.droiddesk.x11.X11ServiceClient
 import com.orailnoor.droiddesk.x11.X11InputController
 
@@ -33,7 +34,7 @@ class DesktopActivity : Activity() {
     private var isSetupDone = false
     private var shouldStartSession = false
     private var sessionMode = "termux"
-    private var desktopEnv = "xfce4"
+    private var desktopEnv = DwmJangirProfile.DESKTOP_ID
     private lateinit var linuxRuntime: LinuxRuntime
     private lateinit var chrootRuntime: ChrootRuntime
     private lateinit var placeholder: FrameLayout
@@ -54,7 +55,7 @@ class DesktopActivity : Activity() {
         chrootRuntime = ChrootRuntime(this)
         shouldStartSession = intent.getBooleanExtra("startSession", false)
         sessionMode = intent.getStringExtra("mode") ?: if (chrootRuntime.hasRoot()) "chroot" else "termux"
-        desktopEnv = intent.getStringExtra("de") ?: "xfce4"
+        desktopEnv = DwmJangirProfile.normalizeDesktop(intent.getStringExtra("de"))
 
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

@@ -5,47 +5,20 @@ import 'package:droiddesk/theme/droid_theme.dart';
 import 'package:droiddesk/state/app_state.dart';
 import 'package:droiddesk/screens/setup/setup_progress.dart';
 
-/// Desktop Environment picker — the only choice before Essentials setup.
+/// DWM Rahul profile confirmation before Essentials setup.
 class DEPickerScreen extends StatelessWidget {
   const DEPickerScreen({super.key});
 
   static const _desktops = [
     _DEOption(
-      id: 'xfce4',
-      name: 'XFCE4',
+      id: 'dwm-jangir',
+      name: 'DWM Rahul',
       description:
-          'Fast, customizable, low resource usage. The best all-rounder.',
-      ram: '~300 MB RAM',
-      icon: Icons.grid_view_rounded,
+          'Your dwm-jangir X11 desktop with LightDM compatibility, Tailscale, and RustDesk.',
+      ram: 'No XFCE',
+      icon: Icons.dashboard_customize_rounded,
       color: DroidTheme.secondary,
       recommended: true,
-    ),
-    _DEOption(
-      id: 'lxqt',
-      name: 'LXQt',
-      description: 'Ultra-lightweight Qt-based desktop. Fastest option.',
-      ram: '~200 MB RAM',
-      icon: Icons.widgets_rounded,
-      color: Color(0xFF0A82F1),
-      recommended: false,
-    ),
-    _DEOption(
-      id: 'mate',
-      name: 'MATE',
-      description: 'Classic GNOME 2 fork. Familiar and comfortable.',
-      ram: '~400 MB RAM',
-      icon: Icons.view_comfy_rounded,
-      color: Color(0xFF87A556),
-      recommended: false,
-    ),
-    _DEOption(
-      id: 'kde',
-      name: 'KDE Plasma',
-      description: 'Modern, feature-rich. Needs strong GPU and 4GB+ RAM.',
-      ram: '~600 MB RAM',
-      icon: Icons.auto_awesome_mosaic_rounded,
-      color: Color(0xFF1D99F3),
-      recommended: false,
     ),
   ];
 
@@ -70,14 +43,14 @@ class DEPickerScreen extends StatelessWidget {
                 _buildStepIndicator(1, 2),
                 const SizedBox(height: 32),
 
-                Text('Choose Desktop', style: DroidTheme.headingXl)
+                Text('DWM Rahul Desktop', style: DroidTheme.headingXl)
                     .animate()
                     .fadeIn(duration: 400.ms)
                     .slideX(begin: -0.1, duration: 400.ms),
 
                 const SizedBox(height: 8),
                 Text(
-                  'Desktop Essentials installs the selected desktop, terminal, file manager, and core tools. More apps can be added later.',
+                  'DroidDesk installs your pinned dwm-jangir build and launches it directly on the embedded X11 server. XFCE is not installed.',
                   style: DroidTheme.bodyMd,
                 ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
 
@@ -178,7 +151,7 @@ class DEPickerScreen extends StatelessWidget {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Install Essentials'),
+                            Text('Install DWM Stack'),
                             SizedBox(width: 4),
                             Icon(Icons.download_rounded, size: 18),
                           ],

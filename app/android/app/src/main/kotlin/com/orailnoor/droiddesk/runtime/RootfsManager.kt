@@ -62,17 +62,10 @@ class RootfsManager(private val context: Context) {
 
     fun getMissingPackages(): List<String> {
         if (!isRootfsReady()) return listOf("rootfs")
-        val de = getInstalledDE().ifEmpty { "xfce4" }
-        val deBin = when (de) {
-            "lxqt" -> "usr/bin/lxqt-session"
-            "mate" -> "usr/bin/mate-session"
-            "kde" -> "usr/bin/startplasma-x11"
-            else -> "usr/bin/xfce4-session"
-        }
-        return if (File(rootfsDir, deBin).exists()) {
+        return if (File(rootfsDir, "usr/local/bin/dwm").canExecute()) {
             emptyList()
         } else {
-            listOf(de)
+            listOf(DwmJangirProfile.DESKTOP_ID)
         }
     }
 
@@ -376,94 +369,6 @@ class RootfsManager(private val context: Context) {
         }
 
         Log.i(TAG, "Rootfs configuration complete")
-    }
-
-    // ── Desktop Environment Installation ──
-
-    /**
-     * Install a desktop environment inside the rootfs using apt.
-     * Called after rootfs extraction.
-     */
-    fun installDesktopEnvironment(
-        de: String,
-        runtime: LinuxRuntime,
-        onProgress: (Double, String) -> Unit,
-        onLog: (String) -> Unit
-    ) {
-        thread(name = "de-install") {
-            try {
-                // Forcefully release any stuck apt locks before starting
-                onProgress(0.0, "Clearing package manager locks...")
-                try {
-                    runtime.executeCommand("""
-                        killall -9 apt apt-get dpkg 2>/dev/null || true
-                        rm -f /var/lib/apt/lists/lock
-                        rm -f /var/cache/apt/archives/lock
-                        rm -f /var/lib/dpkg/lock*
-                        dpkg --configure -a
-                    """.trimIndent(), onLog)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Lock clearing failed, continuing anyway: ${e.message}")
-                }
-                
-                onProgress(0.0, "Updating package lists...")
-                runtime.executeCommand("apt-get update -y", onLog)
-                
-                // Pre-configure Firefox PPA to fix Ubuntu snap issue
-                onProgress(0.1, "Configuring repositories...")
-                runtime.executeCommand("""
-                    DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y software-properties-common wget gpg
-                    add-apt-repository ppa:mozillateam/ppa -y
-                    echo "Package: *" > /etc/apt/preferences.d/mozilla-firefox
-                    echo "Pin: release o=LP-PPA-mozillateam" >> /etc/apt/preferences.d/mozilla-firefox
-                    echo "Pin-Priority: 1001" >> /etc/apt/preferences.d/mozilla-firefox
-                    
-                    # Add Microsoft repository for VS Code
-                    mkdir -p /etc/apt/keyrings
-                    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
-                    install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
-                    echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
-                    rm -f packages.microsoft.gpg
-                    
-                    apt-get update -y
-                """.trimIndent(), onLog)
-
-                var packages = when (de) {
-                    "xfce4" -> "xfce4 xfce4-terminal xfce4-whiskermenu-plugin thunar mousepad dbus-x11"
-                    "lxqt" -> "lxqt qterminal pcmanfm-qt featherpad dbus-x11"
-                    "mate" -> "mate-desktop-environment mate-terminal dbus-x11"
-                    "kde" -> "plasma-desktop konsole dolphin dbus-x11"
-                    else -> "xfce4 xfce4-terminal dbus-x11"
-                }
-                
-                // Fix broken dependencies from interrupted apt installs
-                runtime.executeCommand("DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -f -y", onLog)
-
-                onProgress(0.2, "Installing $de packages...")
-                runtime.executeCommand(
-                    "DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y --no-install-recommends $packages", onLog
-                )
-
-                onProgress(0.8, "Installing core utilities...")
-                val result = runtime.executeCommand(
-                    "DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y --no-install-recommends " +
-                    "git wget curl python3 python3-pip htop nano sudo libgl1 x11-xserver-utils", onLog
-                )
-
-                onProgress(0.9, "Configuring embedded X11 display...")
-                
-                if (result.contains("E: ")) {
-                    throw Exception("Apt-get failed: Check terminal output.")
-                }
-
-                deConfigFile.writeText(de)
-                onProgress(1.0, "$de installation complete!")
-
-            } catch (e: Exception) {
-                Log.e(TAG, "DE installation failed: ${e.message}", e)
-                onProgress(-1.0, "Installation failed: ${e.message}")
-            }
-        }
     }
 
     // ── Utility ──

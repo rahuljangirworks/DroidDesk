@@ -45,7 +45,7 @@ class _SetupProgressScreenState extends State<SetupProgressScreen> {
               ),
               title: const Text('Low storage'),
               content: Text(
-                'Only $freeStorage MB is available. Desktop Essentials works best with at least 2 GB free. You can continue, but package installation may fail.',
+                'Only $freeStorage MB is available. The DWM Rahul stack works best with at least 2 GB free. You can continue, but package installation may fail.',
               ),
               actions: [
                 TextButton(
@@ -292,12 +292,12 @@ class _SetupProgressScreenState extends State<SetupProgressScreen> {
           active: progress >= 0.08 && progress < 0.24,
         ),
         _ChecklistItem(
-          label: 'Install Desktop Essentials',
+          label: 'Build and install DWM Rahul',
           done: progress >= 0.70,
           active: progress >= 0.24 && progress < 0.70,
         ),
         _ChecklistItem(
-          label: 'Finalize Desktop Essentials',
+          label: 'Configure Tailscale and remote access',
           done: state.isSetupComplete,
           active: progress >= 0.70 && !state.isSetupComplete,
         ),
@@ -468,7 +468,7 @@ class _SetupProgressScreenState extends State<SetupProgressScreen> {
         );
       }
       return _PhaseInfo(
-        title: state.isInstallingDE ? 'Installing Desktop' : 'Extracting',
+        title: state.isInstallingDE ? 'Installing DWM Stack' : 'Extracting',
         message: state.extractStatus.isNotEmpty
             ? state.extractStatus
             : 'Extracting filesystem...',
@@ -484,7 +484,7 @@ class _SetupProgressScreenState extends State<SetupProgressScreen> {
     if (state.isSetupComplete) {
       return _PhaseInfo(
         title: 'Setup Complete!',
-        message: 'Your Linux desktop is ready to launch.',
+        message: 'DWM Rahul is ready to launch.',
         progress: 1.0,
         icon: Icons.check_circle_rounded,
         error: false,

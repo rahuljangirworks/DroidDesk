@@ -77,7 +77,7 @@ class DroidDeskPlatform {
 
   // ── Native Desktop Environment Installation (non-root fallback) ──
 
-  static Future<bool> installDesktopNative({String de = 'xfce4'}) async {
+  static Future<bool> installDesktopNative({String de = 'dwm-jangir'}) async {
     final result = await _channel.invokeMethod('installDesktopNative', {
       'de': de,
     });
@@ -130,7 +130,7 @@ class DroidDeskPlatform {
   // ── Linux Session ──
 
   static Future<bool> startLinux({
-    String de = 'xfce4',
+    String de = 'dwm-jangir',
     String mode = 'x11',
     int width = 1920,
     int height = 1080,

@@ -69,3 +69,7 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    testImplementation(kotlin("test"))
+}

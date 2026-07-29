@@ -43,8 +43,14 @@ class ChrootRuntime(private val context: Context) {
     fun isRootfsReady(): Boolean = rootfsManager.isRootfsReady()
 
     fun isDesktopInstalled(): Boolean {
-        return File(rootfsDir, CHROOT_DE_MARKER).exists() ||
-                File(rootfsDir, "usr/bin/startxfce4").exists()
+        return getInstalledDE() == DwmJangirProfile.DESKTOP_ID &&
+                File(rootfsDir, "usr/local/bin/dwm").canExecute()
+    }
+
+    fun getInstalledDE(): String {
+        val marker = File(rootfsDir, CHROOT_DE_MARKER)
+        if (!marker.exists()) return ""
+        return marker.readText().trim().takeIf { it == DwmJangirProfile.DESKTOP_ID } ?: ""
     }
 
     fun isRunning(): Boolean = sessionProcess?.isAlive == true
@@ -58,6 +64,8 @@ class ChrootRuntime(private val context: Context) {
         "code_oss" to (File(rootfsDir, "usr/bin/code").exists() || File(rootfsDir, "usr/bin/code-oss").exists()),
         "nodejs" to (File(rootfsDir, "usr/bin/node").exists() && File(rootfsDir, "usr/bin/npm").exists()),
         "imagemagick" to (File(rootfsDir, "usr/bin/convert").exists() || File(rootfsDir, "usr/bin/magick").exists()),
+        "tailscale" to File(rootfsDir, "usr/local/bin/tailscale").exists(),
+        "rustdesk" to File(rootfsDir, "usr/bin/rustdesk").exists(),
     )
 
     // ── Rootfs setup ──
@@ -147,14 +155,168 @@ class ChrootRuntime(private val context: Context) {
                     "DPkg::Lock::Timeout \"60\";\n"
         )
 
+        // A chroot does not own Android's init system. Prevent package postinst
+        // scripts from trying to start LightDM, Tailscale, or other services.
+        File(rootfsDir, "usr/sbin/policy-rc.d").apply {
+            parentFile?.mkdirs()
+            writeText("#!/bin/sh\nexit 101\n")
+            setExecutable(true, false)
+        }
+
         Log.i(TAG, "Chroot rootfs configuration complete")
     }
 
     /**
      * Install the desktop environment and GPU drivers inside the chroot.
      */
+    private fun installDwmJangir(onLog: (String) -> Unit): Boolean {
+        val sourcePath = "/opt/droiddesk/dwm-jangir"
+        val command = """
+            set -e
+            mkdir -p /opt/droiddesk
+            if [ ! -d "$sourcePath/.git" ]; then
+                git clone --no-checkout "${DwmJangirProfile.SOURCE_REPOSITORY}" "$sourcePath"
+            fi
+            git -C "$sourcePath" remote set-url origin "${DwmJangirProfile.SOURCE_REPOSITORY}"
+            git -C "$sourcePath" fetch --depth=1 origin "${DwmJangirProfile.SOURCE_COMMIT}"
+            git -C "$sourcePath" checkout --detach "${DwmJangirProfile.SOURCE_COMMIT}"
+            test "${'$'}(git -C "$sourcePath" rev-parse HEAD)" = "${DwmJangirProfile.SOURCE_COMMIT}"
+            make -C "$sourcePath" clean
+            make -C "$sourcePath" PREFIX=/usr/local
+            install -m 0755 "$sourcePath/dwm" /usr/local/bin/dwm
+            for helper in "$sourcePath"/scripts/*; do
+                [ -f "${'$'}helper" ] || continue
+                [ -x "${'$'}helper" ] || continue
+                install -m 0755 "${'$'}helper" "/usr/local/bin/${'$'}(basename "${'$'}helper")"
+            done
+        """.trimIndent()
+        if (execChroot(command, onLog) != 0) return false
+
+        val sourceDir = File(rootfsDir, "opt/droiddesk/dwm-jangir")
+        val configRoot = File(rootfsDir, "root/.config").apply { mkdirs() }
+        val dwmConfig = File(configRoot, "dwm-titus").apply { mkdirs() }
+        listOf("hotkeys.toml", "themes.toml", "window-rules.toml").forEach { name ->
+            val destination = File(dwmConfig, name)
+            if (!destination.exists()) File(sourceDir, "config/$name").copyTo(destination)
+        }
+
+        val quickshellConfig = File(configRoot, "quickshell")
+        quickshellConfig.deleteRecursively()
+        File(sourceDir, "config/quickshell").copyRecursively(quickshellConfig, overwrite = true)
+
+        val autostartDir = File(rootfsDir, "root/.local/share/dwm-titus/scripts").apply { mkdirs() }
+        File(autostartDir, "autostart.sh").apply {
+            writeText(DwmJangirProfile.mobileAutostart("/usr/local"))
+            setExecutable(true, false)
+        }
+        File(autostartDir, "autostop.sh").apply {
+            writeText(
+                "#!/bin/sh\n" +
+                        "pkill -x quickshell >/dev/null 2>&1 || true\n" +
+                        "pkill -x picom >/dev/null 2>&1 || true\n",
+            )
+            setExecutable(true, false)
+        }
+
+        File(rootfsDir, "usr/share/xsessions/dwm.desktop").apply {
+            parentFile?.mkdirs()
+            writeText(
+                """
+                [Desktop Entry]
+                Name=DWM Rahul
+                Comment=Rahul's dwm-jangir X11 desktop
+                Exec=/usr/local/bin/dwm
+                Type=Application
+                DesktopNames=dwm
+                """.trimIndent() + "\n",
+            )
+        }
+        File(rootfsDir, "etc/lightdm/lightdm.conf.d/50-droiddesk.conf").apply {
+            parentFile?.mkdirs()
+            writeText(
+                """
+                [Seat:*]
+                user-session=dwm
+                greeter-session=lightdm-gtk-greeter
+                """.trimIndent() + "\n",
+            )
+        }
+        return File(rootfsDir, "usr/local/bin/dwm").canExecute()
+    }
+
+    private fun installTailscale(onLog: (String) -> Unit): Boolean {
+        val command = """
+            set -e
+            work=/tmp/droiddesk-tailscale
+            rm -rf "${'$'}work"
+            mkdir -p "${'$'}work"
+            curl -fL --retry 3 "${DwmJangirProfile.TAILSCALE_URL}" -o "${'$'}work/${DwmJangirProfile.TAILSCALE_ARCHIVE}"
+            printf '%s  %s\n' "${DwmJangirProfile.TAILSCALE_SHA256}" "${'$'}work/${DwmJangirProfile.TAILSCALE_ARCHIVE}" | sha256sum -c -
+            tar -xzf "${'$'}work/${DwmJangirProfile.TAILSCALE_ARCHIVE}" -C "${'$'}work"
+            install -m 0755 "${'$'}work/tailscale_${DwmJangirProfile.TAILSCALE_VERSION}_arm64/tailscale" /usr/local/bin/tailscale
+            install -m 0755 "${'$'}work/tailscale_${DwmJangirProfile.TAILSCALE_VERSION}_arm64/tailscaled" /usr/local/bin/tailscaled
+        """.trimIndent()
+        if (execChroot(command, onLog) != 0) return false
+
+        File(rootfsDir, "usr/local/bin/droiddesk-tailscaled").apply {
+            parentFile?.mkdirs()
+            writeText(
+                """
+                #!/bin/bash
+                set -eu
+                socket=/run/tailscale/tailscaled.sock
+                state=/var/lib/tailscale
+                mkdir -p /run/tailscale "${'$'}state"
+                case "${'$'}{1:-status}" in
+                    start)
+                        if ! pgrep -f "tailscaled.*${'$'}socket" >/dev/null 2>&1; then
+                            tun=userspace-networking
+                            [ -c /dev/net/tun ] && tun=tailscale0
+                            nohup /usr/local/bin/tailscaled \
+                                --socket="${'$'}socket" \
+                                --state="${'$'}state/tailscaled.state" \
+                                --tun="${'$'}tun" \
+                                >"${'$'}state/tailscaled.log" 2>&1 &
+                            sleep 1
+                            if ! pgrep -f "tailscaled.*${'$'}socket" >/dev/null 2>&1 &&
+                                [ "${'$'}tun" != userspace-networking ]; then
+                                nohup /usr/local/bin/tailscaled \
+                                    --socket="${'$'}socket" \
+                                    --state="${'$'}state/tailscaled.state" \
+                                    --tun=userspace-networking \
+                                    --socks5-server=127.0.0.1:1055 \
+                                    --outbound-http-proxy-listen=127.0.0.1:1055 \
+                                    >"${'$'}state/tailscaled.log" 2>&1 &
+                            fi
+                        fi
+                        ;;
+                    up) /usr/local/bin/tailscale --socket="${'$'}socket" up ;;
+                    status) /usr/local/bin/tailscale --socket="${'$'}socket" status ;;
+                    stop) pkill -f "tailscaled.*${'$'}socket" >/dev/null 2>&1 || true ;;
+                    *) echo "Usage: droiddesk-tailscaled {start|up|status|stop}" >&2; exit 2 ;;
+                esac
+                """.trimIndent() + "\n",
+            )
+            setExecutable(true, false)
+        }
+        return true
+    }
+
+    private fun installRustDesk(onLog: (String) -> Unit): Boolean {
+        val command = """
+            set -e
+            deb="/tmp/${DwmJangirProfile.RUSTDESK_DEB}"
+            curl -fL --retry 3 "${DwmJangirProfile.RUSTDESK_URL}" -o "${'$'}deb"
+            printf '%s  %s\n' "${DwmJangirProfile.RUSTDESK_SHA256}" "${'$'}deb" | sha256sum -c -
+            dpkg -i "${'$'}deb" || true
+            DEBIAN_FRONTEND=noninteractive apt-get install -f -y
+            test -x /usr/bin/rustdesk
+        """.trimIndent()
+        return execChroot(command, onLog) == 0
+    }
+
     fun installDesktopEnvironment(
-        desktopEnv: String = "xfce4",
+        desktopEnv: String = DwmJangirProfile.DESKTOP_ID,
         onProgress: (Double, String) -> Unit = { _, _ -> },
         onLog: (String) -> Unit = {}
     ) {
@@ -191,19 +353,30 @@ class ChrootRuntime(private val context: Context) {
                     onLog
                 ) != 0) Log.w(TAG, "Mesa packages unavailable; desktop will use available software rendering")
 
-                onProgress(0.4, "Installing desktop environment...")
-                val dePackages = when (desktopEnv) {
-                    "lxqt" -> "lxqt qterminal pcmanfm-qt featherpad"
-                    "mate" -> "mate-desktop-environment mate-terminal"
-                    "kde" -> "plasma-desktop konsole dolphin"
-                    else -> "xfce4 xfce4-terminal xfce4-whiskermenu-plugin thunar mousepad"
-                }
+                val selectedDesktop = DwmJangirProfile.normalizeDesktop(desktopEnv)
+                onProgress(0.35, "Installing DWM, LightDM compatibility, and build dependencies...")
+                val dePackages = DwmJangirProfile.chrootPackages.joinToString(" ")
                 if (execChroot(
                     "DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y --no-install-recommends $dePackages",
                     onLog
                 ) != 0) throw IllegalStateException("Desktop package installation failed")
 
-                onProgress(0.8, "Installing Desktop Essentials tools...")
+                onProgress(0.62, "Building pinned dwm-jangir source...")
+                if (!installDwmJangir(onLog)) {
+                    throw IllegalStateException("Pinned dwm-jangir build failed")
+                }
+
+                onProgress(0.74, "Installing verified Tailscale...")
+                if (!installTailscale(onLog)) {
+                    throw IllegalStateException("Tailscale installation failed")
+                }
+
+                onProgress(0.82, "Installing verified RustDesk ARM64 package...")
+                if (!installRustDesk(onLog)) {
+                    throw IllegalStateException("RustDesk installation failed")
+                }
+
+                onProgress(0.90, "Installing Desktop Essentials tools...")
                 val essentialsExit = execChroot(
                     "DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y --no-install-recommends " +
                             "git nano htop wget curl python3 python3-pip openssh-client",
@@ -214,8 +387,8 @@ class ChrootRuntime(private val context: Context) {
                 onProgress(0.9, "Cleaning up...")
                 execChroot("apt-get clean", onLog)
 
-                File(rootfsDir, CHROOT_DE_MARKER).writeText("$desktopEnv\n")
-                onProgress(1.0, "$desktopEnv installed in chroot")
+                File(rootfsDir, CHROOT_DE_MARKER).writeText("$selectedDesktop\n")
+                onProgress(1.0, "DWM Rahul, Tailscale, and RustDesk installed in chroot")
                 Log.i(TAG, "Desktop environment installation complete")
             } catch (e: Exception) {
                 Log.e(TAG, "DE install failed", e)
@@ -264,6 +437,16 @@ class ChrootRuntime(private val context: Context) {
                 """.trimIndent()
                 "nodejs" -> "DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y --no-install-recommends nodejs npm"
                 "imagemagick" -> "DEBIAN_FRONTEND=noninteractive apt-get update -y && apt-get install -y --no-install-recommends imagemagick"
+                "tailscale" -> {
+                    val installed = installTailscale(onLog)
+                    onProgress(if (installed) 1.0 else -1.0, if (installed) "Tailscale installed" else "Tailscale installation failed")
+                    return installed
+                }
+                "rustdesk" -> {
+                    val installed = installRustDesk(onLog)
+                    onProgress(if (installed) 1.0 else -1.0, if (installed) "RustDesk installed" else "RustDesk installation failed")
+                    return installed
+                }
                 else -> return false
             }
 
@@ -285,7 +468,11 @@ class ChrootRuntime(private val context: Context) {
      * Start the chrooted desktop session.
      * The caller should ensure the X11 socket directory is mounted before this.
      */
-    fun startSession(desktopEnv: String = "xfce4", width: Int = 1920, height: Int = 1080) {
+    fun startSession(
+        desktopEnv: String = DwmJangirProfile.DESKTOP_ID,
+        width: Int = 1920,
+        height: Int = 1080,
+    ) {
         if (!hasRoot()) {
             Log.e(TAG, "Cannot start chroot session without root")
             return
@@ -299,29 +486,11 @@ class ChrootRuntime(private val context: Context) {
             return
         }
 
-        if (desktopEnv == "xfce4") {
-            XfceMobileProfile.install(
-                context = context,
-                homeDir = File(rootfsDir, "root"),
-                wallpaperFile = File(
-                    rootfsDir,
-                    "usr/share/backgrounds/droiddesk/ubuntu-touch.jpg",
-                ),
-                wallpaperPathInSession =
-                    "/usr/share/backgrounds/droiddesk/ubuntu-touch.jpg",
-            )
-        }
-
         ensureMounts()
         bindX11Socket()
 
-        val deBin = when (desktopEnv) {
-            "lxqt" -> "lxqt-session"
-            "mate" -> "mate-session"
-            "kde" -> "startplasma-x11"
-            "xfce4" -> "startxfce4"
-            else -> desktopEnv
-        }
+        val selectedDesktop = DwmJangirProfile.normalizeDesktop(desktopEnv)
+        val deBin = "/usr/local/bin/dwm"
 
         val runScript = """
             # Standard FHS PATH (inherited Android PATH lacks /usr/bin)
@@ -331,7 +500,9 @@ class ChrootRuntime(private val context: Context) {
             export TMPDIR=/tmp
             export HOME=/root
             export PREFIX=/usr
-            export LD_PRELOAD=/usr/local/lib/libclose_range_hack.so
+            export XDG_SESSION_TYPE=x11
+            export XDG_CURRENT_DESKTOP=dwm
+            export DESKTOP_SESSION=dwm
 
             # Source DroidDesk environment
             . /etc/profile.d/droiddesk-ha.sh 2>/dev/null || true
@@ -344,11 +515,13 @@ class ChrootRuntime(private val context: Context) {
             # Make sure X11 socket dir exists in case bind mount was late
             mkdir -p /tmp/.X11-unix
 
-            echo "DIAG: Starting $desktopEnv in chroot on DISPLAY=:0 ..."
-            exec dbus-run-session -- $deBin
+            /usr/local/bin/droiddesk-tailscaled start >/dev/null 2>&1 || true
+
+            echo "DIAG: Starting DWM Rahul in chroot on DISPLAY=:0 ..."
+            exec $deBin
         """.trimIndent()
 
-        Log.i(TAG, "Starting chroot session for $desktopEnv")
+        Log.i(TAG, "Starting chroot session for $selectedDesktop")
 
         // Launch via ProcessBuilder through su so we get a Process handle we can monitor.
         val su = rootShell.findSuPath() ?: return

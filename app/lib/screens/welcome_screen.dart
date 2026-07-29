@@ -90,7 +90,7 @@ class WelcomeScreen extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 Text(
-                  'Ubuntu · XFCE Desktop · Single App',
+                  'Ubuntu · DWM Rahul · Single App',
                   style: DroidTheme.bodySm.copyWith(
                     color: DroidTheme.secondary,
                     fontWeight: FontWeight.w500,

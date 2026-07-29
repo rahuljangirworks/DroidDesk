@@ -33,3 +33,7 @@ local.properties
 /app/sources.list.*
 /app/test_*.sh
 /app/android/app/close_range_hack.c
+
+# RahulOS project-agent pointers are machine-local.
+/.agent
+/AGENTS.md

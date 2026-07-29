@@ -35,6 +35,13 @@ Relevant upstream projects include:
 - Termux User Repository: <https://github.com/termux-user-repository/tur>
 - PRoot-Distro: <https://github.com/termux/proot-distro>
 - Debian copyright information: <https://www.debian.org/legal/licenses/>
+- dwm-jangir, installed from pinned commit
+  `164d43470736e85a3d878e138f81352166c3297f`:
+  <https://github.com/rahuljangirworks/dwm-jangir>
+- Tailscale, installed from the official `1.98.10` ARM64 archive after SHA-256
+  verification: <https://github.com/tailscale/tailscale>
+- RustDesk, installed in rooted Debian mode from the official `1.4.9` AArch64
+  package after SHA-256 verification: <https://github.com/rustdesk/rustdesk>
 
 Runtime download does not remove the need to comply with a package's license
 when DroidDesk itself redistributes, modifies, mirrors, or preinstalls that
@@ -50,5 +57,5 @@ export these notices and include them with each release artifact.
 ## No endorsement
 
 Third-party project and product names are descriptive references only.
-DroidDesk is not an official Termux, Termux:X11, TUR, Debian, Ubuntu, Mozilla,
-or Microsoft product.
+DroidDesk is not an official Termux, Termux:X11, TUR, Debian, Ubuntu,
+Tailscale, RustDesk, Mozilla, or Microsoft product.

@@ -10,7 +10,7 @@ class AppState extends ChangeNotifier {
   String _installedDistro = '';
   String _installedDE = '';
   String _selectedDistro = 'ubuntu';
-  String _selectedDE = 'xfce4';
+  String _selectedDE = 'dwm-jangir';
   int _setupStep = 0; // 0=welcome, 1=distro, 2=de, 3=install, 4=done
 
   // ── Download/Install Progress ──
@@ -296,7 +296,7 @@ class AppState extends ChangeNotifier {
     }
 
     _statusMessage =
-        'Installing desktop environment (this may take a while)...';
+        'Installing DWM Rahul, Tailscale, and RustDesk (this may take a while)...';
     _isInstallingDE = true;
     notifyListeners();
     if (!await DroidDeskPlatform.installDesktopEnvironment(_selectedDE)) {

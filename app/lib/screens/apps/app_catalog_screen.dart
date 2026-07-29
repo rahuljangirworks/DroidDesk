@@ -40,6 +40,22 @@ class _AppCatalogScreenState extends State<AppCatalogScreen> {
       icon: Icons.image_rounded,
       color: DroidTheme.primaryLight,
     ),
+    _OptionalApp(
+      id: 'tailscale',
+      name: 'Tailscale',
+      description:
+          'Verified ARM64 networking with TUN detection and userspace fallback.',
+      icon: Icons.hub_rounded,
+      color: Color(0xFF7C8CF8),
+    ),
+    _OptionalApp(
+      id: 'rustdesk',
+      name: 'RustDesk',
+      description:
+          'Verified ARM64 remote desktop. Linux host mode requires rooted Ubuntu.',
+      icon: Icons.screen_share_rounded,
+      color: Color(0xFF1AA6F7),
+    ),
   ];
 
   static const _proot = _OptionalApp(
@@ -87,7 +103,7 @@ class _AppCatalogScreenState extends State<AppCatalogScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
           children: [
-            Text('Desktop Essentials is ready', style: DroidTheme.headingMd),
+            Text('DWM Rahul stack is ready', style: DroidTheme.headingMd),
             const SizedBox(height: 6),
             Text(
               'Install only what you need. Each application is independent and can be safely retried.',
