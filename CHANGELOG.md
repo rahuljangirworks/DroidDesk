@@ -27,8 +27,9 @@ updated: 2026-07-30
   embedded DWM desktop, and synchronized the pinned profile's managed
   `config/` and `scripts/` trees using the upstream install layout.
 - Fixed an X11 service startup race that could report failure after the native
-  server had already started, and made the setup-complete view scroll safely on
-  shorter landscape layouts.
+  server had already started. The setup-complete view now keeps its final action
+  fixed above the bottom inset while long installation output scrolls
+  independently, with a Xiaomi Pad landscape regression test.
 - Added verified Tailscale ARM64 installation with userspace-networking
   fallback when `/dev/net/tun` is unavailable.
 - Added verified RustDesk AArch64 installation for rooted Debian and explicit

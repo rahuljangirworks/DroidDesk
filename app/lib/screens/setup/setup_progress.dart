@@ -127,164 +127,164 @@ class _SetupProgressScreenState extends State<SetupProgressScreen> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: IntrinsicHeight(
-                    child: Column(
-                      children: [
-                        const Spacer(flex: 1),
-
-                        // ── Circular Progress ──
-                        CircularPercentIndicator(
-                              radius: 80,
-                              lineWidth: 6,
-                              percent: phase.progress.clamp(0.0, 1.0),
-                              center: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    phase.icon,
-                                    size: 36,
-                                    color: phase.error
-                                        ? DroidTheme.error
-                                        : DroidTheme.primary,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${(phase.progress * 100).toInt()}%',
-                                    style: DroidTheme.headingSm.copyWith(
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(
+                        children: [
+                          // ── Circular Progress ──
+                          CircularPercentIndicator(
+                                radius: 80,
+                                lineWidth: 6,
+                                percent: phase.progress.clamp(0.0, 1.0),
+                                center: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      phase.icon,
+                                      size: 36,
                                       color: phase.error
                                           ? DroidTheme.error
-                                          : DroidTheme.textPrimary,
+                                          : DroidTheme.primary,
                                     ),
-                                  ),
-                                ],
-                              ),
-                              progressColor: phase.error
-                                  ? DroidTheme.error
-                                  : DroidTheme.primary,
-                              backgroundColor: DroidTheme.surfaceBorder,
-                              circularStrokeCap: CircularStrokeCap.round,
-                              animateFromLastPercent: true,
-                              animation: true,
-                              animationDuration: 500,
-                            )
-                            .animate()
-                            .scale(
-                              begin: const Offset(0.8, 0.8),
-                              duration: 500.ms,
-                              curve: Curves.easeOut,
-                            )
-                            .fadeIn(duration: 500.ms),
-
-                        const SizedBox(height: 32),
-
-                        // ── Phase Title ──
-                        Text(
-                          phase.title,
-                          style: DroidTheme.headingLg,
-                          textAlign: TextAlign.center,
-                        ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
-
-                        const SizedBox(height: 12),
-
-                        // ── Status Message ──
-                        Text(
-                          phase.message,
-                          style: DroidTheme.bodyMd.copyWith(
-                            color: phase.error
-                                ? DroidTheme.error
-                                : DroidTheme.textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-
-                        const SizedBox(height: 48),
-
-                        // ── Steps Checklist ──
-                        _buildChecklist(state),
-
-                        if (state.setupLog.isNotEmpty) ...[
-                          const SizedBox(height: 20),
-                          _buildInstallLog(state.setupLog),
-                        ],
-
-                        const Spacer(flex: 1),
-
-                        // ── Action Buttons ──
-                        if (phase.error) ...[
-                          SizedBox(
-                            width: double.infinity,
-                            height: 52,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                state.clearError();
-                                _started = false;
-                                _startSetup();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: DroidTheme.error,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              child: const Text('Retry'),
-                            ),
-                          ),
-                        ] else if (phase.complete) ...[
-                          SizedBox(
-                                width: double.infinity,
-                                height: 52,
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pushAndRemoveUntil(
-                                      MaterialPageRoute(
-                                        builder: (_) => const HomeScreen(),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${(phase.progress * 100).toInt()}%',
+                                      style: DroidTheme.headingSm.copyWith(
+                                        color: phase.error
+                                            ? DroidTheme.error
+                                            : DroidTheme.textPrimary,
                                       ),
-                                      (route) => false,
-                                    );
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: DroidTheme.accent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
                                     ),
-                                  ),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text('Launch DroidDesk'),
-                                      SizedBox(width: 8),
-                                      Icon(
-                                        Icons.rocket_launch_rounded,
-                                        size: 20,
-                                      ),
-                                    ],
-                                  ),
+                                  ],
                                 ),
+                                progressColor: phase.error
+                                    ? DroidTheme.error
+                                    : DroidTheme.primary,
+                                backgroundColor: DroidTheme.surfaceBorder,
+                                circularStrokeCap: CircularStrokeCap.round,
+                                animateFromLastPercent: true,
+                                animation: true,
+                                animationDuration: 500,
                               )
                               .animate()
-                              .fadeIn(duration: 500.ms)
                               .scale(
-                                begin: const Offset(0.9, 0.9),
+                                begin: const Offset(0.8, 0.8),
                                 duration: 500.ms,
-                                curve: Curves.elasticOut,
-                              ),
-                        ],
+                                curve: Curves.easeOut,
+                              )
+                              .fadeIn(duration: 500.ms),
 
-                        const SizedBox(height: 48),
-                      ],
+                          const SizedBox(height: 32),
+
+                          // ── Phase Title ──
+                          Text(
+                            phase.title,
+                            style: DroidTheme.headingLg,
+                            textAlign: TextAlign.center,
+                          ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+
+                          const SizedBox(height: 12),
+
+                          // ── Status Message ──
+                          Text(
+                            phase.message,
+                            style: DroidTheme.bodyMd.copyWith(
+                              color: phase.error
+                                  ? DroidTheme.error
+                                  : DroidTheme.textSecondary,
+                            ),
+                            textAlign: TextAlign.center,
+                          ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
+
+                          const SizedBox(height: 48),
+
+                          // ── Steps Checklist ──
+                          _buildChecklist(state),
+
+                          if (state.setupLog.isNotEmpty) ...[
+                            const SizedBox(height: 20),
+                            _buildInstallLog(state.setupLog),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+
+                // Keep the final action outside the scrolling install content
+                // so it remains fully visible on short landscape displays.
+                if (phase.error || phase.complete)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 24),
+                    child: _buildActionButton(phase, state),
+                  ),
+              ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildActionButton(_PhaseInfo phase, AppState state) {
+    if (phase.error) {
+      return SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: ElevatedButton(
+          onPressed: () {
+            state.clearError();
+            _started = false;
+            _startSetup();
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: DroidTheme.error,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: const Text('Retry'),
+        ),
+      );
+    }
+
+    return SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DroidTheme.accent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Launch DroidDesk'),
+                SizedBox(width: 8),
+                Icon(Icons.rocket_launch_rounded, size: 20),
+              ],
+            ),
+          ),
+        )
+        .animate()
+        .fadeIn(duration: 500.ms)
+        .scale(
+          begin: const Offset(0.9, 0.9),
+          duration: 500.ms,
+          curve: Curves.elasticOut,
+        );
   }
 
   Widget _buildChecklist(AppState state) {
