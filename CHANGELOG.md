@@ -19,6 +19,16 @@ updated: 2026-07-30
   DroidDesk-managed session files.
 - Added an explicit ARM64 native-runtime gate so incompatible x86 emulators
   fail with a clear ABI message instead of attempting the AArch64 bootstrap.
+- Fixed relocated Termux Git helper, Make shell, and `pkg-config` discovery so
+  native ARM64 setup can clone and build the pinned `dwm-jangir` source.
+- Made interrupted DWM source builds recoverable by resetting the app-managed
+  checkout to the pinned commit before each build.
+- Added the XKB data, Xcursor runtime, and Quickshell packages required for the
+  embedded DWM desktop, and synchronized the pinned profile's managed
+  `config/` and `scripts/` trees using the upstream install layout.
+- Fixed an X11 service startup race that could report failure after the native
+  server had already started, and made the setup-complete view scroll safely on
+  shorter landscape layouts.
 - Added verified Tailscale ARM64 installation with userspace-networking
   fallback when `/dev/net/tun` is unavailable.
 - Added verified RustDesk AArch64 installation for rooted Debian and explicit

@@ -22,6 +22,9 @@ class DwmJangirProfileTest {
             assertFalse(packages.any { it.contains("xfce", ignoreCase = true) })
         }
         assertFalse(DwmJangirProfile.nativeCorePackages.contains("dwm"))
+        assertTrue(DwmJangirProfile.nativeCorePackages.contains("xkeyboard-config"))
+        assertTrue(DwmJangirProfile.nativeCorePackages.contains("libxcursor"))
+        assertTrue(DwmJangirProfile.nativeCorePackages.contains("quickshell"))
         assertFalse(DwmJangirProfile.nativeRecommendedPackages.contains("quickshell"))
     }
 
@@ -75,6 +78,11 @@ class DwmJangirProfileTest {
                 "managed-v2\n",
                 File(home, ".config/quickshell/shell.qml").readText(),
             )
+            assertEquals(
+                "managed-v2\n",
+                File(home, ".local/share/dwm-titus/config/quickshell/shell.qml").readText(),
+            )
+            assertTrue(File(home, ".local/share/dwm-titus/scripts/dwm-status").canExecute())
             assertTrue(File(bin, "dwm-status").canExecute())
         } finally {
             root.deleteRecursively()

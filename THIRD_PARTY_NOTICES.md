@@ -36,7 +36,7 @@ Relevant upstream projects include:
 - PRoot-Distro: <https://github.com/termux/proot-distro>
 - Debian copyright information: <https://www.debian.org/legal/licenses/>
 - dwm-jangir, installed from pinned commit
-  `164d43470736e85a3d878e138f81352166c3297f`:
+  `9e895f3723825120687e1ecf2404d53ed83d677d`:
   <https://github.com/rahuljangirworks/dwm-jangir>
 - Tailscale, installed from the official `1.98.10` ARM64 archive after SHA-256
   verification: <https://github.com/tailscale/tailscale>

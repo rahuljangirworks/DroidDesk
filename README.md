@@ -28,7 +28,7 @@ The release pins these inputs so setup is reproducible:
 
 | Component | Pinned input |
 | --- | --- |
-| `dwm-jangir` | Commit `164d43470736e85a3d878e138f81352166c3297f` |
+| `dwm-jangir` | Commit `9e895f3723825120687e1ecf2404d53ed83d677d` |
 | Tailscale | ARM64 `1.98.10` archive with SHA-256 verification |
 | RustDesk | ARM64 `1.4.9` Debian package with SHA-256 verification |
 | Rooted base | Ubuntu Base 24.04 ARM64 |

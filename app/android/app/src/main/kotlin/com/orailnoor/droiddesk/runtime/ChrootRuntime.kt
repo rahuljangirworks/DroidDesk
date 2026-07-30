@@ -188,7 +188,7 @@ class ChrootRuntime(private val context: Context) {
             fi
             git -C "$sourcePath" remote set-url origin "${DwmJangirProfile.SOURCE_REPOSITORY}"
             git -C "$sourcePath" fetch --depth=1 origin "${DwmJangirProfile.SOURCE_COMMIT}"
-            git -C "$sourcePath" checkout --detach "${DwmJangirProfile.SOURCE_COMMIT}"
+            git -C "$sourcePath" checkout --detach --force "${DwmJangirProfile.SOURCE_COMMIT}"
             test "${'$'}(git -C "$sourcePath" rev-parse HEAD)" = "${DwmJangirProfile.SOURCE_COMMIT}"
             make -C "$sourcePath" clean
             make -C "$sourcePath" PREFIX=/usr/local

@@ -653,7 +653,10 @@ class LinuxRuntime(private val context: Context) {
         Log.i(TAG, "Patching shebangs: $oldPrefix -> $newPrefix")
         var patchCount = 0
 
-        val dirsToScan = listOf("bin", "libexec", "share", "etc", "var/lib/dpkg/info")
+        // Package metadata under lib/pkgconfig also embeds Termux's original
+        // prefix. If it is not relocated, native builds resolve headers and
+        // libraries under /data/data/com.termux and fail on real devices.
+        val dirsToScan = listOf("bin", "lib", "libexec", "share", "etc", "var/lib/dpkg/info")
         for (dirName in dirsToScan) {
             val dir = File(prefixDir, dirName)
             if (!dir.exists()) continue
@@ -1001,6 +1004,17 @@ class LinuxRuntime(private val context: Context) {
             System.getenv("PATH") ?: "/system/bin",
         ).joinToString(":")
         env["HOME"] = homeDir.absolutePath
+        // Git's compiled-in helper/template directories still reference the
+        // original Termux package path. Point them at DroidDesk's relocated
+        // prefix so HTTPS clones can find git-remote-https on real devices.
+        env["GIT_EXEC_PATH"] = "${prefixDir.absolutePath}/libexec/git-core"
+        env["GIT_TEMPLATE_DIR"] = "${prefixDir.absolutePath}/share/git-core/templates"
+        // pkg-config's compiled-in search path points at the original Termux
+        // prefix. Restrict discovery to DroidDesk's relocated metadata.
+        env["PKG_CONFIG_LIBDIR"] = listOf(
+            "${prefixDir.absolutePath}/lib/pkgconfig",
+            "${prefixDir.absolutePath}/share/pkgconfig",
+        ).joinToString(":")
         // Desktop terminals use SHELL to spawn their child process. Android's
         // account database points at /system/bin/sh instead of this userspace.
         env["SHELL"] = File(binDir, "bash").absolutePath
@@ -1284,10 +1298,13 @@ class LinuxRuntime(private val context: Context) {
             fi
             git -C "${sourceDir.absolutePath}" remote set-url origin "${DwmJangirProfile.SOURCE_REPOSITORY}"
             git -C "${sourceDir.absolutePath}" fetch --depth=1 origin "${DwmJangirProfile.SOURCE_COMMIT}"
-            git -C "${sourceDir.absolutePath}" checkout --detach "${DwmJangirProfile.SOURCE_COMMIT}"
+            git -C "${sourceDir.absolutePath}" checkout --detach --force "${DwmJangirProfile.SOURCE_COMMIT}"
             test "${'$'}(git -C "${sourceDir.absolutePath}" rev-parse HEAD)" = "${DwmJangirProfile.SOURCE_COMMIT}"
-            make -C "${sourceDir.absolutePath}" clean
-            make -C "${sourceDir.absolutePath}" CC=clang PREFIX="${prefixDir.absolutePath}"
+            make -C "${sourceDir.absolutePath}" SHELL="${binDir.absolutePath}/sh" clean
+            make -C "${sourceDir.absolutePath}" \
+                SHELL="${binDir.absolutePath}/sh" \
+                CC=clang \
+                PREFIX="${prefixDir.absolutePath}"
         """.trimIndent()
         if (executeCommand(buildCommand).startsWith("Error:")) {
             Log.e(TAG, "Pinned dwm-jangir build failed")

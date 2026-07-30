@@ -2,7 +2,7 @@
 set -euo pipefail
 
 dwm_repo=https://github.com/rahuljangirworks/dwm-jangir.git
-dwm_commit=164d43470736e85a3d878e138f81352166c3297f
+dwm_commit=9e895f3723825120687e1ecf2404d53ed83d677d
 tailscale_version=1.98.10
 tailscale_archive=tailscale_1.98.10_arm64.tgz
 tailscale_sha256=d74a84e07cb1948d9f09a23ae161417c6127e562949773705c95d0762be2809d
@@ -29,10 +29,11 @@ pkg update -y
 
 log "Installing DWM Rahul dependencies"
 pkg install -y \
-    termux-x11-nightly xorg-xrandr pulseaudio dbus \
+    termux-x11-nightly xorg-xrandr xkeyboard-config pulseaudio dbus \
     dwm dmenu st \
     git make clang pkg-config coreutils curl tar \
-    libx11 libxft libxinerama libxrender imlib2 libxcb fontconfig freetype \
+    libx11 libxft libxinerama libxrender libxcursor imlib2 libxcb fontconfig freetype \
+    quickshell \
     wget openssh htop python
 
 for optional_package in picom feh noto-fonts noto-fonts-emoji; do
@@ -47,7 +48,7 @@ if [ ! -d "$dwm_source/.git" ]; then
 fi
 git -C "$dwm_source" remote set-url origin "$dwm_repo"
 git -C "$dwm_source" fetch --depth=1 origin "$dwm_commit"
-git -C "$dwm_source" checkout --detach "$dwm_commit"
+git -C "$dwm_source" checkout --detach --force "$dwm_commit"
 test "$(git -C "$dwm_source" rev-parse HEAD)" = "$dwm_commit"
 
 log "Building DWM Rahul"

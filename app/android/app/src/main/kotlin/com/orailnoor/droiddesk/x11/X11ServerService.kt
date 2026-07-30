@@ -81,17 +81,23 @@ class X11ServerService : Service() {
                 latch = CountDownLatch(1)
                 startLatch = latch
                 serverHandler.post {
-                    startSucceeded = try {
+                    val result = try {
                         configureEnvironment()
                         Log.i(TAG, "Starting native X server in pid=${android.os.Process.myPid()}")
                         CmdEntryPoint.start(arrayOf(":0", "-nolock"))
                     } catch (error: Throwable) {
                         Log.e(TAG, "Native X server failed to start", error)
                         false
-                    } finally {
-                        started = true
-                        latch.countDown()
                     }
+
+                    // Publish the result before releasing Binder callers. With
+                    // the assignment wrapped around try/finally, Kotlin ran the
+                    // finally block before assigning the try expression, so a
+                    // waiter could observe the default false value even though
+                    // the native server had started successfully.
+                    startSucceeded = result
+                    started = true
+                    latch.countDown()
                     Log.i(TAG, "Native X server start result=$startSucceeded")
                 }
             }

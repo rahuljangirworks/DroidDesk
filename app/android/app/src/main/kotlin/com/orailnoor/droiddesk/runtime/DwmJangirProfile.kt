@@ -16,8 +16,8 @@ object DwmJangirProfile {
     const val SUPPORTED_NATIVE_ABI = "arm64-v8a"
 
     const val SOURCE_REPOSITORY = "https://github.com/rahuljangirworks/dwm-jangir.git"
-    const val SOURCE_COMMIT = "164d43470736e85a3d878e138f81352166c3297f"
-    private const val PROFILE_VERSION = "1"
+    const val SOURCE_COMMIT = "9e895f3723825120687e1ecf2404d53ed83d677d"
+    private const val PROFILE_VERSION = "2"
     private const val PROFILE_MARKER = ".droiddesk-dwm-rahul-profile"
 
     const val TAILSCALE_VERSION = "1.98.10"
@@ -37,6 +37,9 @@ object DwmJangirProfile {
         "dbus",
         "dmenu",
         "st",
+        "xkeyboard-config",
+        "libxcursor",
+        "quickshell",
     )
 
     val nativeBuildPackages = listOf(
@@ -156,8 +159,29 @@ object DwmJangirProfile {
                 destination = File(xdgConfig, "quickshell"),
             )
 
-            val autostartDir =
-                File(homeDir, ".local/share/dwm-titus/scripts").apply { mkdirs() }
+            val profileData = File(homeDir, ".local/share/dwm-titus").apply { mkdirs() }
+            replaceManagedDirectory(
+                source = sourceConfig,
+                destination = File(profileData, "config"),
+            )
+
+            val sourceScripts = File(sourceDir, "scripts")
+            val autostartDir = File(profileData, "scripts")
+            replaceManagedDirectory(
+                source = sourceScripts,
+                destination = autostartDir,
+            )
+            autostartDir.walkTopDown()
+                .filter(File::isFile)
+                .forEach { destination ->
+                    val relativePath = destination.relativeTo(autostartDir).path
+                    if (File(sourceScripts, relativePath).canExecute()) {
+                        check(destination.setExecutable(true, false) || destination.canExecute())
+                    }
+                }
+
+            // These two lifecycle scripts are DroidDesk-managed Android
+            // adaptations; all other helpers mirror the pinned source.
             writeExecutable(
                 File(autostartDir, "autostart.sh"),
                 mobileAutostart(prefix),
