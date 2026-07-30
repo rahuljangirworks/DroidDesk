@@ -25,7 +25,7 @@ Kotlin profile tests run through:
 
 ```bash
 cd android
-./gradlew testDebugUnitTest
+./gradlew :app:testDebugUnitTest
 ```
 
 The repository GitHub Actions workflows generate the ignored Gradle wrapper

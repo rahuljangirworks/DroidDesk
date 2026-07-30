@@ -73,7 +73,7 @@ jobs:
 
       - name: Test Kotlin profile
         working-directory: app/android
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew :app:testDebugUnitTest
 
       - name: Build debug APK
         working-directory: app
