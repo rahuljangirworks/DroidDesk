@@ -5,6 +5,27 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseKeystorePath = System.getenv("DROIDDESK_KEYSTORE_PATH")
+val releaseStorePassword = System.getenv("DROIDDESK_STORE_PASSWORD")
+val releaseKeyAlias = System.getenv("DROIDDESK_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("DROIDDESK_KEY_PASSWORD")
+val releaseSigningConfigured =
+    listOf(
+        releaseKeystorePath,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() }
+val releaseTaskRequested =
+    gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+
+if (releaseTaskRequested && !releaseSigningConfigured) {
+    throw GradleException(
+        "Release signing is not configured. Set DROIDDESK_KEYSTORE_PATH, " +
+            "DROIDDESK_STORE_PASSWORD, DROIDDESK_KEY_ALIAS, and DROIDDESK_KEY_PASSWORD.",
+    )
+}
+
 android {
     namespace = "com.orailnoor.droiddesk"
     compileSdk = flutter.compileSdkVersion
@@ -29,18 +50,20 @@ android {
         targetSdk = 28 // API 28 completely disables the Android 10+ execve() block
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
 
-        ndk {
-            // ARM64 only — all modern Android phones
-            abiFilters += listOf("arm64-v8a")
+    signingConfigs {
+        create("release") {
+            storeFile = file(releaseKeystorePath ?: "release-keystore-not-configured")
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
         }
     }
 
     buildTypes {
         release {
-            // GitHub-distributed testing builds intentionally use Android's
-            // debug key so release APKs are directly installable.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

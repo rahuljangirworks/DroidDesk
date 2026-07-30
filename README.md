@@ -157,8 +157,21 @@ Release workflow:
 .github/workflows/release.yml
 ```
 
-Pushing a `v*` tag validates the version, runs tests, builds the release APK,
-generates its SHA-256 file, and publishes both to a GitHub release.
+Pushing a strict SemVer `v*` tag validates the version, runs tests, builds a
+release-key-signed ARM64 APK, verifies its signature and packaged ABI, and
+generates checksum, certificate, and build metadata files. The workflow creates
+a draft pre-release; a maintainer publishes it only after physical-device and
+release-compliance qualification.
+
+The `release` GitHub environment must provide these Actions secrets:
+
+- `DROIDDESK_KEYSTORE_BASE64`
+- `DROIDDESK_STORE_PASSWORD`
+- `DROIDDESK_KEY_ALIAS`
+- `DROIDDESK_KEY_PASSWORD`
+
+See [GitHub release setup](RELEASE.md) before creating a release tag. Never
+commit a keystore or its passwords.
 
 ## Runtime Verification
 

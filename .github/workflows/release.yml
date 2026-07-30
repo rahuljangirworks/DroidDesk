@@ -15,14 +15,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release:
-    name: Build and publish ARM64 APK
+    name: Build signed ARM64 draft
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    environment: release
     steps:
       - name: Resolve release tag
         id: release
@@ -45,6 +46,15 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Verify tagged source
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_TAG")"
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -55,7 +65,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: "3.44.8"
           cache: true
 
       - name: Set up Gradle
@@ -63,23 +73,12 @@ jobs:
         with:
           gradle-version: "8.13"
 
-      - name: Verify release version
+      - name: Verify version and repository
         shell: bash
         run: |
           pubspec_version=$(sed -n 's/^version: \([^+]*\).*/\1/p' app/pubspec.yaml)
           test "$pubspec_version" = "${{ steps.release.outputs.version }}"
           scripts/check.sh
-
-      - name: Install Flutter dependencies
-        working-directory: app
-        run: flutter pub get
-
-      - name: Analyze and test
-        working-directory: app
-        run: |
-          dart format --output=none --set-exit-if-changed lib test test_ffi.dart
-          flutter analyze --fatal-infos
-          flutter test
 
       - name: Generate Android Gradle wrapper
         run: |
@@ -90,20 +89,101 @@ jobs:
         working-directory: app/android
         run: ./gradlew :app:testDebugUnitTest
 
-      - name: Build release APK
+      - name: Configure release signing
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DROIDDESK_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.DROIDDESK_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.DROIDDESK_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.DROIDDESK_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [[ -n "$KEYSTORE_BASE64" ]] || missing+=(DROIDDESK_KEYSTORE_BASE64)
+          [[ -n "$STORE_PASSWORD" ]] || missing+=(DROIDDESK_STORE_PASSWORD)
+          [[ -n "$KEY_ALIAS" ]] || missing+=(DROIDDESK_KEY_ALIAS)
+          [[ -n "$KEY_PASSWORD" ]] || missing+=(DROIDDESK_KEY_PASSWORD)
+          if (( ${#missing[@]} )); then
+            printf 'Missing required GitHub Actions secrets: %s\n' "${missing[*]}" >&2
+            exit 2
+          fi
+
+          keystore="$RUNNER_TEMP/droiddesk-release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          keytool -list \
+            -keystore "$keystore" \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >/dev/null
+
+          printf 'DROIDDESK_KEYSTORE_PATH=%s\n' "$keystore" >> "$GITHUB_ENV"
+
+      - name: Build signed ARM64 release APK
         working-directory: app
+        env:
+          DROIDDESK_STORE_PASSWORD: ${{ secrets.DROIDDESK_STORE_PASSWORD }}
+          DROIDDESK_KEY_ALIAS: ${{ secrets.DROIDDESK_KEY_ALIAS }}
+          DROIDDESK_KEY_PASSWORD: ${{ secrets.DROIDDESK_KEY_PASSWORD }}
         run: >-
           flutter build apk --release
-          --build-name=${{ steps.release.outputs.version }}
-          --build-number=${{ github.run_number }}
+          --split-per-abi
+          --target-platform android-arm64
+          --no-pub
 
-      - name: Prepare checksummed artifact
+      - name: Verify and package release artifact
         shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
+          source_apk="app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          test -f "$source_apk"
+
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$sdk_root"
+          build_tools=$(find "$sdk_root/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          apksigner="$build_tools/apksigner"
+          apkanalyzer="$sdk_root/cmdline-tools/latest/bin/apkanalyzer"
+          test -x "$apksigner"
+          test -x "$apkanalyzer"
+
+          signature_report=$("$apksigner" verify --verbose --print-certs "$source_apk")
+          printf '%s\n' "$signature_report"
+          if grep -qi 'CN=Android Debug' <<<"$signature_report"; then
+            echo "Release APK must not use the Android debug certificate." >&2
+            exit 3
+          fi
+
+          version_name=$("$apkanalyzer" manifest version-name "$source_apk")
+          version_code=$("$apkanalyzer" manifest version-code "$source_apk")
+          test "$version_name" = "$RELEASE_VERSION"
+          [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
+
+          mapfile -t packaged_abis < <(
+            unzip -Z1 "$source_apk" |
+              sed -n 's#^lib/\([^/]*\)/.*#\1#p' |
+              sort -u
+          )
+          if (( ${#packaged_abis[@]} != 1 )) || [[ "${packaged_abis[0]:-}" != arm64-v8a ]]; then
+            printf 'Expected only arm64-v8a; packaged ABIs: %s\n' "${packaged_abis[*]:-none}" >&2
+            exit 4
+          fi
+
           mkdir -p dist
-          artifact="DroidDesk-${{ steps.release.outputs.tag }}-arm64.apk"
-          cp app/build/app/outputs/flutter-apk/app-release.apk "dist/$artifact"
-          sha256sum "dist/$artifact" > "dist/$artifact.sha256"
+          artifact="DroidDesk-${RELEASE_TAG}-arm64.apk"
+          cp "$source_apk" "dist/$artifact"
+          printf '%s\n' "$signature_report" > "dist/$artifact.certificate.txt"
+          (
+            cd dist
+            sha256sum "$artifact" > "$artifact.sha256"
+          )
+          {
+            printf 'tag=%s\n' "$RELEASE_TAG"
+            printf 'commit=%s\n' "$(git rev-parse HEAD)"
+            printf 'versionName=%s\n' "$version_name"
+            printf 'versionCode=%s\n' "$version_code"
+            printf 'abi=arm64-v8a\n'
+            printf 'flutter=%s\n' "$(flutter --version --machine | sed -n 's/.*\"frameworkVersion\":\"\([^\"]*\)\".*/\1/p')"
+          } > "dist/$artifact.metadata.txt"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
@@ -113,20 +193,29 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish GitHub release
+      - name: Create draft GitHub release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: DroidDesk ${{ steps.release.outputs.tag }}
           generate_release_notes: true
+          draft: true
           prerelease: true
+          make_latest: false
           fail_on_unmatched_files: true
           body: |
-            DWM Rahul release candidate for ARM64 Android.
+            Signed DWM Rahul release candidate for ARM64 Android.
 
-            This build is automated and checksummed. Physical-device qualification
-            and the release-compliance blockers documented in COMPLIANCE.md remain
-            open, so this release is intentionally marked as a pre-release.
+            This draft was built from the tagged commit, signed with the DroidDesk
+            release key, restricted to ARM64, signature-verified, and checksummed.
+            Keep it as a draft until physical-device qualification and the release
+            compliance requirements in COMPLIANCE.md are complete.
           files: |
             dist/*.apk
+            dist/*.txt
             dist/*.sha256
+
+      - name: Remove decoded keystore
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/droiddesk-release.jks"
