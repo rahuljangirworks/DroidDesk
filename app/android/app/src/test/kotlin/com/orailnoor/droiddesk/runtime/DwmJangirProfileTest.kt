@@ -1,6 +1,6 @@
 package com.orailnoor.droiddesk.runtime
 
-import kotlin.test.Test
+import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
