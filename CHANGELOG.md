@@ -30,6 +30,8 @@ updated: 2026-07-30
   server had already started. The setup-complete view now keeps its final action
   fixed above the bottom inset while long installation output scrolls
   independently, with a Xiaomi Pad landscape regression test.
+- Fixed the terminal sheet's software-keyboard inset handling so its command
+  field remains above the keyboard without overflowing in tablet landscape.
 - Added verified Tailscale ARM64 installation with userspace-networking
   fallback when `/dev/net/tun` is unavailable.
 - Added verified RustDesk AArch64 installation for rooted Debian and explicit

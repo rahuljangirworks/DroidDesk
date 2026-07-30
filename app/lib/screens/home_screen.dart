@@ -462,7 +462,15 @@ class HomeScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => _TerminalSheet(state: state),
+      builder: (context) {
+        final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+        return AnimatedPadding(
+          padding: EdgeInsets.only(bottom: keyboardInset),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: _TerminalSheet(state: state),
+        );
+      },
     );
   }
 
@@ -534,136 +542,127 @@ class _TerminalSheetState extends State<_TerminalSheet> {
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollCtrl) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: DroidTheme.textDim,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        return Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: DroidTheme.textDim,
+                borderRadius: BorderRadius.circular(2),
               ),
+            ),
 
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.terminal,
-                      size: 18,
-                      color: DroidTheme.secondary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text('Terminal', style: DroidTheme.headingSm),
-                    const Spacer(),
-                    // Stop Command Button
-                    IconButton(
-                      icon: const Icon(
-                        Icons.stop_circle_rounded,
-                        color: DroidTheme.error,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        widget.state.interruptCommand();
-                        widget.state.appendTerminalOutput(
-                          '\n^C (Command interrupted)\n',
-                        );
-                      },
-                      tooltip: 'Interrupt Command (Ctrl+C)',
-                      splashRadius: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.state.isProotTerminal
-                          ? 'compat · Debian PRoot'
-                          : widget.state.hasRoot
-                          ? 'chroot · ${_distroLabel(widget.state.installedDistro)}'
-                          : 'native · Termux/TUR',
-                      style: DroidTheme.monoSm,
-                    ),
-                  ],
-                ),
-              ),
-
-              const Divider(color: DroidTheme.surfaceBorder, height: 1),
-
-              // Output
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: widget.state.terminalOutput.length,
-                  itemBuilder: (context, index) {
-                    return SelectableText(
-                      widget.state.terminalOutput[index],
-                      style: DroidTheme.mono.copyWith(
-                        color:
-                            widget.state.terminalOutput[index].startsWith('\$')
-                            ? DroidTheme.accent
-                            : DroidTheme.textSecondary,
-                        height: 1.4,
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              // Input
-              Container(
-                padding: const EdgeInsets.fromLTRB(12, 8, 8, 16),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0D0D0D),
-                  border: Border(
-                    top: BorderSide(color: DroidTheme.surfaceBorder),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.terminal,
+                    size: 18,
+                    color: DroidTheme.secondary,
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      '\$ ',
-                      style: DroidTheme.mono.copyWith(color: DroidTheme.accent),
+                  const SizedBox(width: 8),
+                  Text('Terminal', style: DroidTheme.headingSm),
+                  const Spacer(),
+                  // Stop Command Button
+                  IconButton(
+                    icon: const Icon(
+                      Icons.stop_circle_rounded,
+                      color: DroidTheme.error,
+                      size: 20,
                     ),
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        style: DroidTheme.mono.copyWith(fontSize: 13),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          hintText: 'Enter command...',
-                          hintStyle: TextStyle(color: DroidTheme.textDim),
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onSubmitted: (_) => _runCommand(),
-                        autofocus: true,
-                      ),
+                    onPressed: () {
+                      widget.state.interruptCommand();
+                      widget.state.appendTerminalOutput(
+                        '\n^C (Command interrupted)\n',
+                      );
+                    },
+                    tooltip: 'Interrupt Command (Ctrl+C)',
+                    splashRadius: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.state.isProotTerminal
+                        ? 'compat · Debian PRoot'
+                        : widget.state.hasRoot
+                        ? 'chroot · ${_distroLabel(widget.state.installedDistro)}'
+                        : 'native · Termux/TUR',
+                    style: DroidTheme.monoSm,
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(color: DroidTheme.surfaceBorder, height: 1),
+
+            // Output
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(12),
+                itemCount: widget.state.terminalOutput.length,
+                itemBuilder: (context, index) {
+                  return SelectableText(
+                    widget.state.terminalOutput[index],
+                    style: DroidTheme.mono.copyWith(
+                      color: widget.state.terminalOutput[index].startsWith('\$')
+                          ? DroidTheme.accent
+                          : DroidTheme.textSecondary,
+                      height: 1.4,
                     ),
-                    IconButton(
-                      onPressed: _runCommand,
-                      icon: const Icon(Icons.send_rounded, size: 20),
-                      color: DroidTheme.primary,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 36,
-                        minHeight: 36,
-                      ),
-                    ),
-                  ],
+                  );
+                },
+              ),
+            ),
+
+            // Input
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 16),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0D0D0D),
+                border: Border(
+                  top: BorderSide(color: DroidTheme.surfaceBorder),
                 ),
               ),
-            ],
-          ),
+              child: Row(
+                children: [
+                  Text(
+                    '\$ ',
+                    style: DroidTheme.mono.copyWith(color: DroidTheme.accent),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      style: DroidTheme.mono.copyWith(fontSize: 13),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Enter command...',
+                        hintStyle: TextStyle(color: DroidTheme.textDim),
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onSubmitted: (_) => _runCommand(),
+                      autofocus: true,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _runCommand,
+                    icon: const Icon(Icons.send_rounded, size: 20),
+                    color: DroidTheme.primary,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
