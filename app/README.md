@@ -15,7 +15,7 @@ rooted Ubuntu runtimes. Both paths install and launch the pinned
 
 ```bash
 flutter pub get
-dart format --output=none --set-exit-if-changed lib test
+dart format --output=none --set-exit-if-changed lib test test_ffi.dart
 flutter analyze --fatal-infos
 flutter test
 flutter build apk --debug

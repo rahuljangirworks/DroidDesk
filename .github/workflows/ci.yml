@@ -56,7 +56,7 @@ jobs:
 
       - name: Check Dart formatting
         working-directory: app
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none --set-exit-if-changed lib test test_ffi.dart
 
       - name: Analyze Flutter
         working-directory: app

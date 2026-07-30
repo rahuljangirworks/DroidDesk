@@ -77,7 +77,7 @@ jobs:
       - name: Analyze and test
         working-directory: app
         run: |
-          dart format --output=none --set-exit-if-changed lib test
+          dart format --output=none --set-exit-if-changed lib test test_ffi.dart
           flutter analyze --fatal-infos
           flutter test
 
