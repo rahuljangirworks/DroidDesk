@@ -42,12 +42,12 @@ jobs:
           printf 'version=%s\n' "${tag#v}" >> "$GITHUB_OUTPUT"
 
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ steps.release.outputs.tag }}
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -59,7 +59,7 @@ jobs:
           cache: true
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.13"
 
@@ -106,7 +106,7 @@ jobs:
           sha256sum "dist/$artifact" > "dist/$artifact.sha256"
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: droiddesk-${{ steps.release.outputs.tag }}-arm64
           path: dist/*
@@ -114,7 +114,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: DroidDesk ${{ steps.release.outputs.tag }}

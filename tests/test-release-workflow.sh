@@ -15,7 +15,7 @@ grep -q 'flutter build apk --debug' "$ci"
 grep -q 'tags:' "$release"
 grep -Eq "['\"]v\\\\?\\*['\"]" "$release"
 grep -q 'flutter build apk --release' "$release"
-grep -q 'softprops/action-gh-release@v2' "$release"
+grep -q 'softprops/action-gh-release@v3' "$release"
 grep -q 'prerelease: true' "$release"
 grep -Eq '^version: 0\.2\.0\+[0-9]+$' "$pubspec"
 

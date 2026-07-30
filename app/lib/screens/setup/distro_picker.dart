@@ -15,7 +15,9 @@ class DistroPickerScreen extends StatelessWidget {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: DroidTheme.backgroundGradient),
+        decoration: const BoxDecoration(
+          gradient: DroidTheme.backgroundGradient,
+        ),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -37,55 +39,57 @@ class DistroPickerScreen extends StatelessWidget {
                 Text(
                   'Select a distribution to install. This will be downloaded on setup.',
                   style: DroidTheme.bodyMd,
-                )
-                    .animate()
-                    .fadeIn(delay: 100.ms, duration: 400.ms),
+                ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
 
                 const SizedBox(height: 32),
 
                 // ── Distro Cards ──
                 Expanded(
                   child: ListView(
-                    children: [
-                      _DistroCard(
-                        id: 'ubuntu',
-                        name: 'Ubuntu 24.04 LTS',
-                        description: 'Best overall experience. Huge package library, great community support.',
-                        size: '~350 MB download',
-                        color: DroidTheme.ubuntuColor,
-                        icon: Icons.circle,
-                        recommended: true,
-                        selected: state.selectedDistro == 'ubuntu',
-                        onTap: () => state.setSelectedDistro('ubuntu'),
-                      ),
-                      const SizedBox(height: 12),
-                      _DistroCard(
-                        id: 'alpine',
-                        name: 'Alpine Linux 3.20',
-                        description: 'Ultra minimal and secure. Best for low resource usage.',
-                        size: '~3 MB download',
-                        color: DroidTheme.alpineColor,
-                        icon: Icons.diamond_outlined,
-                        recommended: false,
-                        selected: state.selectedDistro == 'alpine',
-                        onTap: () => state.setSelectedDistro('alpine'),
-                      ),
-                      const SizedBox(height: 12),
-                      _DistroCard(
-                        id: 'kali',
-                        name: 'Kali Linux',
-                        description: 'Security and pentesting tools. Wireshark, Metasploit, Nmap included.',
-                        size: '~500 MB download',
-                        color: DroidTheme.kaliColor,
-                        icon: Icons.shield_outlined,
-                        recommended: false,
-                        selected: state.selectedDistro == 'kali',
-                        onTap: () => state.setSelectedDistro('kali'),
-                      ),
-                    ]
-                        .animate(interval: 80.ms)
-                        .fadeIn(delay: 200.ms, duration: 400.ms)
-                        .slideY(begin: 0.1, duration: 400.ms),
+                    children:
+                        [
+                              _DistroCard(
+                                id: 'ubuntu',
+                                name: 'Ubuntu 24.04 LTS',
+                                description:
+                                    'Best overall experience. Huge package library, great community support.',
+                                size: '~350 MB download',
+                                color: DroidTheme.ubuntuColor,
+                                icon: Icons.circle,
+                                recommended: true,
+                                selected: state.selectedDistro == 'ubuntu',
+                                onTap: () => state.setSelectedDistro('ubuntu'),
+                              ),
+                              const SizedBox(height: 12),
+                              _DistroCard(
+                                id: 'alpine',
+                                name: 'Alpine Linux 3.20',
+                                description:
+                                    'Ultra minimal and secure. Best for low resource usage.',
+                                size: '~3 MB download',
+                                color: DroidTheme.alpineColor,
+                                icon: Icons.diamond_outlined,
+                                recommended: false,
+                                selected: state.selectedDistro == 'alpine',
+                                onTap: () => state.setSelectedDistro('alpine'),
+                              ),
+                              const SizedBox(height: 12),
+                              _DistroCard(
+                                id: 'kali',
+                                name: 'Kali Linux',
+                                description:
+                                    'Security and pentesting tools. Wireshark, Metasploit, Nmap included.',
+                                size: '~500 MB download',
+                                color: DroidTheme.kaliColor,
+                                icon: Icons.shield_outlined,
+                                recommended: false,
+                                selected: state.selectedDistro == 'kali',
+                                onTap: () => state.setSelectedDistro('kali'),
+                              ),
+                            ]
+                            .animate(interval: 80.ms)
+                            .fadeIn(delay: 200.ms, duration: 400.ms)
+                            .slideY(begin: 0.1, duration: 400.ms),
                   ),
                 ),
 
@@ -103,14 +107,24 @@ class DistroPickerScreen extends StatelessWidget {
                         onPressed: () {
                           Navigator.of(context).push(
                             PageRouteBuilder(
-                              pageBuilder: (context, animation, secondaryAnimation) => const DEPickerScreen(),
-                              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: child,
-                                );
-                              },
-                              transitionDuration: const Duration(milliseconds: 300),
+                              pageBuilder:
+                                  (context, animation, secondaryAnimation) =>
+                                      const DEPickerScreen(),
+                              transitionsBuilder:
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: child,
+                                    );
+                                  },
+                              transitionDuration: const Duration(
+                                milliseconds: 300,
+                              ),
                             ),
                           );
                         },
@@ -147,8 +161,8 @@ class DistroPickerScreen extends StatelessWidget {
               color: isCurrent
                   ? DroidTheme.primary
                   : isActive
-                      ? DroidTheme.primary.withValues(alpha: 0.5)
-                      : DroidTheme.surfaceBorder,
+                  ? DroidTheme.primary.withValues(alpha: 0.5)
+                  : DroidTheme.surfaceBorder,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -192,7 +206,9 @@ class _DistroCard extends StatelessWidget {
           color: selected ? DroidTheme.surfaceLight : DroidTheme.cardBg,
           borderRadius: BorderRadius.circular(DroidTheme.radiusLg),
           border: Border.all(
-            color: selected ? color.withValues(alpha: 0.6) : DroidTheme.surfaceBorder,
+            color: selected
+                ? color.withValues(alpha: 0.6)
+                : DroidTheme.surfaceBorder,
             width: selected ? 1.5 : 1,
           ),
           boxShadow: selected
@@ -254,7 +270,9 @@ class _DistroCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     size,
-                    style: DroidTheme.monoSm.copyWith(color: DroidTheme.textDim),
+                    style: DroidTheme.monoSm.copyWith(
+                      color: DroidTheme.textDim,
+                    ),
                   ),
                 ],
               ),

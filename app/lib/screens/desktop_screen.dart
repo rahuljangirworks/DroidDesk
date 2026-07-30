@@ -16,7 +16,6 @@ class DesktopScreen extends StatefulWidget {
 }
 
 class _DesktopScreenState extends State<DesktopScreen> {
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,32 +28,35 @@ class _DesktopScreenState extends State<DesktopScreen> {
             surfaceFactory: (context, controller) {
               return AndroidViewSurface(
                 controller: controller as AndroidViewController,
-                gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+                gestureRecognizers:
+                    const <Factory<OneSequenceGestureRecognizer>>{},
                 hitTestBehavior: PlatformViewHitTestBehavior.opaque,
               );
             },
             onCreatePlatformView: (params) {
               return PlatformViewsService.initExpensiveAndroidView(
-                id: params.id,
-                viewType: 'droiddesk-surface',
-                layoutDirection: TextDirection.ltr,
-                creationParams: null,
-                creationParamsCodec: const StandardMessageCodec(),
-                onFocus: () {
-                  params.onFocusChanged(true);
-                },
-              )
+                  id: params.id,
+                  viewType: 'droiddesk-surface',
+                  layoutDirection: TextDirection.ltr,
+                  creationParams: null,
+                  creationParamsCodec: const StandardMessageCodec(),
+                  onFocus: () {
+                    params.onFocusChanged(true);
+                  },
+                )
                 ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
                 ..create();
             },
           ),
-          
+
           // Floating Action Button to disconnect/return home
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             right: 16,
             child: FloatingActionButton.small(
-              backgroundColor: DroidTheme.cardGradient.colors.first.withValues(alpha: 0.8),
+              backgroundColor: DroidTheme.cardGradient.colors.first.withValues(
+                alpha: 0.8,
+              ),
               onPressed: () {
                 // Return to home screen
                 Navigator.of(context).pop();

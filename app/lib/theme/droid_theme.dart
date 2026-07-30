@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// DroidDesk Design System
-/// 
+///
 /// Dark-first, premium design with a cyberpunk-meets-minimal aesthetic.
 /// Colors inspired by modern terminal themes (Dracula/Nord/Catppuccin).
 class DroidTheme {
@@ -16,13 +16,13 @@ class DroidTheme {
   static const Color cardBg = Color(0xFF151D2B);
 
   // ── Accent Colors ──
-  static const Color primary = Color(0xFF6366F1);      // Indigo
+  static const Color primary = Color(0xFF6366F1); // Indigo
   static const Color primaryLight = Color(0xFF818CF8);
-  static const Color secondary = Color(0xFF22D3EE);     // Cyan
-  static const Color accent = Color(0xFF10B981);         // Emerald
-  static const Color warning = Color(0xFFF59E0B);        // Amber
-  static const Color error = Color(0xFFEF4444);          // Red
-  static const Color success = Color(0xFF22C55E);        // Green
+  static const Color secondary = Color(0xFF22D3EE); // Cyan
+  static const Color accent = Color(0xFF10B981); // Emerald
+  static const Color warning = Color(0xFFF59E0B); // Amber
+  static const Color error = Color(0xFFEF4444); // Red
+  static const Color success = Color(0xFF22C55E); // Green
 
   // ── Text Colors ──
   static const Color textPrimary = Color(0xFFF1F5F9);
@@ -168,10 +168,7 @@ class DroidTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
         ),
-        textStyle: GoogleFonts.inter(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -182,10 +179,7 @@ class DroidTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
         ),
-        textStyle: GoogleFonts.inter(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
   );
