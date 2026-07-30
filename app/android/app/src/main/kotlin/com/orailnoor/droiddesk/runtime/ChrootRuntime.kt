@@ -44,13 +44,22 @@ class ChrootRuntime(private val context: Context) {
 
     fun isDesktopInstalled(): Boolean {
         return getInstalledDE() == DwmJangirProfile.DESKTOP_ID &&
-                File(rootfsDir, "usr/local/bin/dwm").canExecute()
+                DwmJangirProfile.isInstalled(
+                    File(rootfsDir, "root"),
+                    File(rootfsDir, "usr/local/bin"),
+                )
     }
 
     fun getInstalledDE(): String {
         val marker = File(rootfsDir, CHROOT_DE_MARKER)
         if (!marker.exists()) return ""
-        return marker.readText().trim().takeIf { it == DwmJangirProfile.DESKTOP_ID } ?: ""
+        return marker.readText().trim().takeIf {
+            it == DwmJangirProfile.DESKTOP_ID &&
+                DwmJangirProfile.isInstalled(
+                    File(rootfsDir, "root"),
+                    File(rootfsDir, "usr/local/bin"),
+                )
+        } ?: ""
     }
 
     fun isRunning(): Boolean = sessionProcess?.isAlive == true
@@ -171,7 +180,7 @@ class ChrootRuntime(private val context: Context) {
      */
     private fun installDwmJangir(onLog: (String) -> Unit): Boolean {
         val sourcePath = "/opt/droiddesk/dwm-jangir"
-        val command = """
+        val buildCommand = """
             set -e
             mkdir -p /opt/droiddesk
             if [ ! -d "$sourcePath/.git" ]; then
@@ -183,65 +192,18 @@ class ChrootRuntime(private val context: Context) {
             test "${'$'}(git -C "$sourcePath" rev-parse HEAD)" = "${DwmJangirProfile.SOURCE_COMMIT}"
             make -C "$sourcePath" clean
             make -C "$sourcePath" PREFIX=/usr/local
-            install -m 0755 "$sourcePath/dwm" /usr/local/bin/dwm
-            for helper in "$sourcePath"/scripts/*; do
-                [ -f "${'$'}helper" ] || continue
-                [ -x "${'$'}helper" ] || continue
-                install -m 0755 "${'$'}helper" "/usr/local/bin/${'$'}(basename "${'$'}helper")"
-            done
         """.trimIndent()
-        if (execChroot(command, onLog) != 0) return false
+        if (execChroot(buildCommand, onLog) != 0) return false
 
         val sourceDir = File(rootfsDir, "opt/droiddesk/dwm-jangir")
-        val configRoot = File(rootfsDir, "root/.config").apply { mkdirs() }
-        val dwmConfig = File(configRoot, "dwm-titus").apply { mkdirs() }
-        listOf("hotkeys.toml", "themes.toml", "window-rules.toml").forEach { name ->
-            val destination = File(dwmConfig, name)
-            if (!destination.exists()) File(sourceDir, "config/$name").copyTo(destination)
-        }
-
-        val quickshellConfig = File(configRoot, "quickshell")
-        quickshellConfig.deleteRecursively()
-        File(sourceDir, "config/quickshell").copyRecursively(quickshellConfig, overwrite = true)
-
-        val autostartDir = File(rootfsDir, "root/.local/share/dwm-titus/scripts").apply { mkdirs() }
-        File(autostartDir, "autostart.sh").apply {
-            writeText(DwmJangirProfile.mobileAutostart("/usr/local"))
-            setExecutable(true, false)
-        }
-        File(autostartDir, "autostop.sh").apply {
-            writeText(
-                "#!/bin/sh\n" +
-                        "pkill -x quickshell >/dev/null 2>&1 || true\n" +
-                        "pkill -x picom >/dev/null 2>&1 || true\n",
-            )
-            setExecutable(true, false)
-        }
-
-        File(rootfsDir, "usr/share/xsessions/dwm.desktop").apply {
-            parentFile?.mkdirs()
-            writeText(
-                """
-                [Desktop Entry]
-                Name=DWM Rahul
-                Comment=Rahul's dwm-jangir X11 desktop
-                Exec=/usr/local/bin/dwm
-                Type=Application
-                DesktopNames=dwm
-                """.trimIndent() + "\n",
-            )
-        }
-        File(rootfsDir, "etc/lightdm/lightdm.conf.d/50-droiddesk.conf").apply {
-            parentFile?.mkdirs()
-            writeText(
-                """
-                [Seat:*]
-                user-session=dwm
-                greeter-session=lightdm-gtk-greeter
-                """.trimIndent() + "\n",
-            )
-        }
-        return File(rootfsDir, "usr/local/bin/dwm").canExecute()
+        return DwmJangirProfile.install(
+            sourceDir = sourceDir,
+            homeDir = File(rootfsDir, "root"),
+            binDir = File(rootfsDir, "usr/local/bin"),
+            prefix = "/usr/local",
+            xSessionsDir = File(rootfsDir, "usr/share/xsessions"),
+            lightDmConfigDir = File(rootfsDir, "etc/lightdm/lightdm.conf.d"),
+        )
     }
 
     private fun installTailscale(onLog: (String) -> Unit): Boolean {

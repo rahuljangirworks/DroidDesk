@@ -1,17 +1,24 @@
 package com.orailnoor.droiddesk.runtime
 
+import java.io.File
+
 /**
  * Reproducible DroidDesk desktop profile.
  *
  * Keep network artifacts pinned here so runtime installers and tests share one
- * source of truth. Authentication material never belongs in this profile.
+ * source of truth. This is also the single owner of the files installed from
+ * dwm-jangir, matching the idempotent profile pattern used by upstream XFCE.
+ * Authentication material never belongs in this profile.
  */
 object DwmJangirProfile {
     const val DESKTOP_ID = "dwm-jangir"
     const val DISPLAY_NAME = "DWM Rahul"
+    const val SUPPORTED_NATIVE_ABI = "arm64-v8a"
 
     const val SOURCE_REPOSITORY = "https://github.com/rahuljangirworks/dwm-jangir.git"
     const val SOURCE_COMMIT = "164d43470736e85a3d878e138f81352166c3297f"
+    private const val PROFILE_VERSION = "1"
+    private const val PROFILE_MARKER = ".droiddesk-dwm-rahul-profile"
 
     const val TAILSCALE_VERSION = "1.98.10"
     const val TAILSCALE_ARCHIVE = "tailscale_1.98.10_arm64.tgz"
@@ -87,10 +94,128 @@ object DwmJangirProfile {
 
     fun normalizeDesktop(requested: String?): String = DESKTOP_ID
 
+    fun supportsNativeAbi(supportedAbis: List<String>): Boolean =
+        supportedAbis.firstOrNull() == SUPPORTED_NATIVE_ABI
+
     fun packagePlan(mode: String): List<String> = when (mode) {
         "native" -> nativeCorePackages + nativeBuildPackages + nativeRecommendedPackages
         "chroot" -> chrootPackages
         else -> emptyList()
+    }
+
+    private fun markerFile(homeDir: File): File =
+        File(homeDir, ".local/share/dwm-titus/$PROFILE_MARKER")
+
+    private fun markerContents(): String = "$PROFILE_VERSION:$SOURCE_COMMIT\n"
+
+    fun isInstalled(homeDir: File, binDir: File): Boolean =
+        File(binDir, "dwm").canExecute() &&
+            markerFile(homeDir).run { isFile && readText() == markerContents() }
+
+    /**
+     * Install the Android-safe DWM profile from an already verified and built
+     * dwm-jangir checkout. User-owned TOML files are seeded only once, while
+     * Quickshell and DroidDesk session scripts are explicitly managed.
+     */
+    fun install(
+        sourceDir: File,
+        homeDir: File,
+        binDir: File,
+        prefix: String,
+        xSessionsDir: File? = null,
+        lightDmConfigDir: File? = null,
+    ): Boolean {
+        val builtDwm = File(sourceDir, "dwm")
+        val sourceConfig = File(sourceDir, "config")
+        if (!builtDwm.isFile || !sourceConfig.isDirectory) return false
+
+        return runCatching {
+            binDir.mkdirs()
+            builtDwm.copyTo(File(binDir, "dwm"), overwrite = true)
+            check(File(binDir, "dwm").setExecutable(true, false) || File(binDir, "dwm").canExecute())
+
+            File(sourceDir, "scripts").listFiles()
+                ?.filter { it.isFile && it.canExecute() }
+                ?.forEach { helper ->
+                    val destination = File(binDir, helper.name)
+                    helper.copyTo(destination, overwrite = true)
+                    check(destination.setExecutable(true, false) || destination.canExecute())
+                }
+
+            val xdgConfig = File(homeDir, ".config").apply { mkdirs() }
+            val dwmConfig = File(xdgConfig, "dwm-titus").apply { mkdirs() }
+            listOf("hotkeys.toml", "themes.toml", "window-rules.toml").forEach { name ->
+                val destination = File(dwmConfig, name)
+                if (!destination.exists()) {
+                    File(sourceConfig, name).copyTo(destination)
+                }
+            }
+
+            replaceManagedDirectory(
+                source = File(sourceConfig, "quickshell"),
+                destination = File(xdgConfig, "quickshell"),
+            )
+
+            val autostartDir =
+                File(homeDir, ".local/share/dwm-titus/scripts").apply { mkdirs() }
+            writeExecutable(
+                File(autostartDir, "autostart.sh"),
+                mobileAutostart(prefix),
+            )
+            writeExecutable(
+                File(autostartDir, "autostop.sh"),
+                """
+                #!/bin/sh
+                pkill -x quickshell >/dev/null 2>&1 || true
+                pkill -x picom >/dev/null 2>&1 || true
+                """.trimIndent() + "\n",
+            )
+
+            xSessionsDir?.let { directory ->
+                directory.mkdirs()
+                File(directory, "dwm.desktop").writeText(
+                    """
+                    [Desktop Entry]
+                    Name=$DISPLAY_NAME
+                    Comment=Rahul's dwm-jangir X11 desktop
+                    Exec=$prefix/bin/dwm
+                    Type=Application
+                    DesktopNames=dwm
+                    """.trimIndent() + "\n",
+                )
+            }
+            lightDmConfigDir?.let { directory ->
+                directory.mkdirs()
+                File(directory, "50-droiddesk.conf").writeText(
+                    """
+                    [Seat:*]
+                    user-session=dwm
+                    greeter-session=lightdm-gtk-greeter
+                    """.trimIndent() + "\n",
+                )
+            }
+
+            markerFile(homeDir).apply {
+                parentFile?.mkdirs()
+                writeText(markerContents())
+            }
+            check(isInstalled(homeDir, binDir))
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun replaceManagedDirectory(source: File, destination: File) {
+        check(source.isDirectory)
+        val staged = File(destination.parentFile, "${destination.name}.droiddesk-new")
+        staged.deleteRecursively()
+        check(source.copyRecursively(staged, overwrite = true))
+        destination.deleteRecursively()
+        check(staged.renameTo(destination))
+    }
+
+    private fun writeExecutable(file: File, contents: String) {
+        file.writeText(contents)
+        check(file.setExecutable(true, false) || file.canExecute())
     }
 
     fun mobileAutostart(prefix: String): String = """

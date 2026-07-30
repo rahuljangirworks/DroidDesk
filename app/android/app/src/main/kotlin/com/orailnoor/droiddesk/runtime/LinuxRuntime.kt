@@ -108,7 +108,10 @@ class LinuxRuntime(private val context: Context) {
         val marker = File(prefixDir, DE_MARKER)
         if (marker.exists()) {
             val installed = marker.readText().trim()
-            return if (installed == DwmJangirProfile.DESKTOP_ID) installed else ""
+            return if (
+                installed == DwmJangirProfile.DESKTOP_ID &&
+                DwmJangirProfile.isInstalled(homeDir, binDir)
+            ) installed else ""
         }
         // Individual desktop binaries may already exist after a partially failed
         // package transaction. Only the marker written at the end of the complete
@@ -244,6 +247,14 @@ class LinuxRuntime(private val context: Context) {
     }
 
     fun extractBootstrapIfNeeded(context: Context) {
+        if (!DwmJangirProfile.supportsNativeAbi(Build.SUPPORTED_ABIS.toList())) {
+            Log.e(
+                TAG,
+                "Native runtime requires ${DwmJangirProfile.SUPPORTED_NATIVE_ABI}; " +
+                    "device ABIs are ${Build.SUPPORTED_ABIS.joinToString()}",
+            )
+            return
+        }
         val bashBin = File(prefixDir, "bin/bash")
         if (bashBin.exists()) {
             Log.i(TAG, "Bootstrap already extracted at ${prefixDir.absolutePath}")
@@ -1265,9 +1276,8 @@ class LinuxRuntime(private val context: Context) {
 
     private fun installDwmJangirNative(): Boolean {
         val sourceDir = File(homeDir, ".local/src/dwm-jangir")
-        val installCommand = """
+        val buildCommand = """
             set -e
-            source_dir="${sourceDir.absolutePath}"
             mkdir -p "${sourceDir.parentFile!!.absolutePath}"
             if [ ! -d "${sourceDir.absolutePath}/.git" ]; then
                 git clone --no-checkout "${DwmJangirProfile.SOURCE_REPOSITORY}" "${sourceDir.absolutePath}"
@@ -1278,51 +1288,18 @@ class LinuxRuntime(private val context: Context) {
             test "${'$'}(git -C "${sourceDir.absolutePath}" rev-parse HEAD)" = "${DwmJangirProfile.SOURCE_COMMIT}"
             make -C "${sourceDir.absolutePath}" clean
             make -C "${sourceDir.absolutePath}" CC=clang PREFIX="${prefixDir.absolutePath}"
-            install -m 0755 "${sourceDir.absolutePath}/dwm" "${binDir.absolutePath}/dwm"
-            for helper in "${sourceDir.absolutePath}"/scripts/*; do
-                [ -f "${'$'}helper" ] || continue
-                [ -x "${'$'}helper" ] || continue
-                install -m 0755 "${'$'}helper" "${binDir.absolutePath}/${'$'}(basename "${'$'}helper")"
-            done
         """.trimIndent()
-        if (executeCommand(installCommand).startsWith("Error:")) {
-            Log.e(TAG, "Pinned dwm-jangir build or install failed")
+        if (executeCommand(buildCommand).startsWith("Error:")) {
+            Log.e(TAG, "Pinned dwm-jangir build failed")
             return false
         }
 
-        val xdgConfig = File(homeDir, ".config").apply { mkdirs() }
-        val dwmConfig = File(xdgConfig, "dwm-titus").apply { mkdirs() }
-        listOf("hotkeys.toml", "themes.toml", "window-rules.toml").forEach { name ->
-            val destination = File(dwmConfig, name)
-            if (!destination.exists()) {
-                File(sourceDir, "config/$name").copyTo(destination)
-            }
-        }
-
-        val managedQuickshell = File(xdgConfig, "quickshell")
-        managedQuickshell.deleteRecursively()
-        if (!File(sourceDir, "config/quickshell").copyRecursively(managedQuickshell, overwrite = true)) {
-            Log.e(TAG, "Could not install managed Quickshell configuration")
-            return false
-        }
-
-        val autostartDir = File(homeDir, ".local/share/dwm-titus/scripts").apply { mkdirs() }
-        File(autostartDir, "autostart.sh").apply {
-            writeText(DwmJangirProfile.mobileAutostart(prefixDir.absolutePath))
-            setExecutable(true, false)
-        }
-        File(autostartDir, "autostop.sh").apply {
-            writeText(
-                """
-                #!/bin/sh
-                pkill -x quickshell >/dev/null 2>&1 || true
-                pkill -x picom >/dev/null 2>&1 || true
-                """.trimIndent() + "\n",
-            )
-            setExecutable(true, false)
-        }
-
-        return File(binDir, "dwm").canExecute()
+        return DwmJangirProfile.install(
+            sourceDir = sourceDir,
+            homeDir = homeDir,
+            binDir = binDir,
+            prefix = prefixDir.absolutePath,
+        )
     }
 
     private fun installTailscaleNative(): Boolean {
@@ -1390,6 +1367,16 @@ class LinuxRuntime(private val context: Context) {
     ): Boolean {
         val selectedDesktop = normalizedDesktop(desktopEnv)
         val marker = File(prefixDir, DE_MARKER)
+
+        if (!DwmJangirProfile.supportsNativeAbi(Build.SUPPORTED_ABIS.toList())) {
+            val actual = Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+            val message =
+                "Unsupported CPU ABI: $actual. DWM Rahul currently requires " +
+                    DwmJangirProfile.SUPPORTED_NATIVE_ABI
+            Log.e(TAG, message)
+            onProgress?.invoke(-1.0, message)
+            return false
+        }
 
         if (getInstalledDE() == selectedDesktop) {
             onProgress?.invoke(1.0, "$selectedDesktop is already installed")

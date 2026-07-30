@@ -14,6 +14,11 @@ updated: 2026-07-30
   `dwm-jangir` desktop profile.
 - Added DWM source verification, build automation, mobile autostart, and
   LightDM session compatibility for rooted Debian installs.
+- Centralized native and chroot DWM file installation in one versioned,
+  idempotent profile that preserves user TOML settings while updating
+  DroidDesk-managed session files.
+- Added an explicit ARM64 native-runtime gate so incompatible x86 emulators
+  fail with a clear ABI message instead of attempting the AArch64 bootstrap.
 - Added verified Tailscale ARM64 installation with userspace-networking
   fallback when `/dev/net/tun` is unavailable.
 - Added verified RustDesk AArch64 installation for rooted Debian and explicit
